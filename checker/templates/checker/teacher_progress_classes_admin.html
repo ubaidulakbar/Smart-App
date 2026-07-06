@@ -1,0 +1,17 @@
+{% extends 'checker/base.html' %}
+{% block title %}Teacher Progress by Class{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Teacher Progress by Class</h1><p class="muted">Open a class to see all courses and teachers.</p></div>
+</div>
+<section class="card">
+  <div class="admin-action-grid">
+    {% for classroom in classes %}
+      <a class="admin-action" href="{% url 'teacher_progress_class_detail_admin' classroom.id %}">
+        <strong>{{ classroom }}</strong>
+        <span>{{ classroom.assignment_count }} active course assignment(s)</span>
+      </a>
+    {% empty %}<p class="muted">No classes found.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

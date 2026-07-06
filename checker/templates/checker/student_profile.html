@@ -1,0 +1,44 @@
+{% extends 'checker/base.html' %}
+{% block title %}Student Profile{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ student.full_name }}</h1>
+    <p class="muted">{{ student.classroom }} · Roll No: {{ student.roll_no }}</p>
+  </div>
+</div>
+<div class="stats-grid">
+  <div class="stat-card"><span>Total Expected</span><strong>{{ summary.total_expected }}</strong></div>
+  <div class="stat-card"><span>Locked</span><strong>{{ summary.locked }}</strong></div>
+  <div class="stat-card"><span>Pending</span><strong>{{ summary.pending }}</strong></div>
+  <div class="stat-card"><span>Checked</span><strong>{{ summary.checked }}</strong></div>
+  <div class="stat-card"><span>Incomplete</span><strong>{{ summary.incomplete }}</strong></div>
+  <div class="stat-card"><span>Not Submitted</span><strong>{{ summary.not_submitted }}</strong></div>
+  <div class="stat-card"><span>Absent</span><strong>{{ summary.absent }}</strong></div>
+</div>
+<section class="card">
+  <form method="get" class="filter-form">
+    <select name="subject"><option value="">All Subjects</option>{% for s in subjects %}<option value="{{ s.id }}" {% if request.GET.subject == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+    <select name="status"><option value="">All Status</option>{% for value,label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <button class="primary" type="submit">Filter</button>
+  </form>
+</section>
+<section class="card table-wrap">
+  <table>
+    <thead><tr><th>Subject</th><th>Chapter</th><th>Status</th><th>Remarks</th><th>Entered By</th><th>Actual Checker</th><th>Locked Date</th><th>Request</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+        <tr class="{% if not row.record %}pending-row{% endif %}">
+          <td>{{ row.subject.name }}</td><td>{{ row.chapter.title }}</td>
+          <td>{% if row.record %}{{ row.record.get_status_display }}{% else %}<span class="badge pending">Pending</span>{% endif %}</td>
+          <td>{% if row.record %}{{ row.record.remarks|default:'—' }}{% else %}—{% endif %}</td>
+          <td>{% if row.record %}{{ row.record.entered_by.checker_profile.display_name|default:row.record.entered_by.username }}{% else %}—{% endif %}</td>
+          <td>{% if row.record %}{{ row.record.actual_checker_display }}{% else %}—{% endif %}</td>
+          <td>{% if row.record %}{{ row.record.locked_at|date:'d M Y, h:i A' }}{% else %}—{% endif %}</td>
+          <td>{% if is_checker and row.record %}<a href="{% url 'request_correction' row.record.id %}">Request Correction</a>{% else %}—{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="8">No rows found for this student.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

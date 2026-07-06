@@ -1,0 +1,65 @@
+{% extends 'checker/base.html' %}
+{% block title %}Checking List{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ classroom }}</h1>
+    <p class="muted">{{ subject.name }} · {{ chapter.title }}</p>
+  </div>
+  <div class="actions">
+    <a class="button big-action" href="{{ refresh_url }}">Refresh Records</a>
+    <a class="button big-action" href="{% url 'select_checking' %}">Change Selection</a>
+  </div>
+</div>
+
+<section class="card">
+  <div class="student-list">
+    {% for row in rows %}
+      <div class="student-row {% if row.record.locked %}locked{% endif %}">
+        <div class="student-main">
+          <strong>{{ row.student.full_name }}</strong>
+          <span class="muted">Roll No: {{ row.student.roll_no }}</span>
+        </div>
+
+        {% if row.record and row.record.locked %}
+          <div class="locked-box">
+            <span class="badge">{{ row.record.get_status_display }}</span>
+            <p>{{ row.record.remarks|default:'No remarks' }}</p>
+            <p class="muted small">Entered by: {{ row.record.entered_by.checker_profile.display_name|default:row.record.entered_by.username }} · Actual checker: {{ row.record.actual_checker_display }} · {{ row.record.locked_at|date:'d M Y, h:i A' }}</p>
+            <a class="button small-button" href="{% url 'request_correction' row.record.id %}">Request Correction</a>
+          </div>
+        {% else %}
+          <form method="post" action="{% url 'lock_record' %}" class="record-form">
+            {% csrf_token %}
+            <input type="hidden" name="student_id" value="{{ row.student.id }}">
+            <input type="hidden" name="class_subject_id" value="{{ class_subject.id }}">
+            <input type="hidden" name="chapter_id" value="{{ chapter.id }}">
+            <input type="hidden" name="next" value="{{ refresh_url }}">
+            <label>Status
+              <select name="status">
+                <option value="checked">Checked</option>
+                <option value="not_checked">Not Checked</option>
+                <option value="absent">Absent</option>
+                <option value="not_submitted">Copy Not Submitted</option>
+                <option value="incomplete">Incomplete</option>
+              </select>
+            </label>
+            <label>Remarks
+              <textarea name="remarks" rows="2" placeholder="Optional comment"></textarea>
+            </label>
+            <details>
+              <summary>Actual checker if different</summary>
+              <label>Name
+                <input type="text" name="actual_checker_name" placeholder="Leave blank if you checked it yourself">
+              </label>
+            </details>
+            <button class="primary danger-safe big-action" type="submit">Lock</button>
+          </form>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p>No students found in this class/section.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

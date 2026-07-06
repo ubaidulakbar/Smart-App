@@ -1,0 +1,13 @@
+{% extends 'checker/base.html' %}
+{% block title %}Add Student{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Add Student</h1>
+  <p class="muted">Only roll no and student name are required. Subjects and chapters come from the selected class setup.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Save Student</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'checker/base.html' %}
+{% block title %}Add User{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Add User</h1>
+  <p class="muted">Create checker or teacher accounts. Password is saved as an admin-only note.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary big-action" type="submit">Create User</button>
+    <a class="button" href="{% url 'admin_users' %}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

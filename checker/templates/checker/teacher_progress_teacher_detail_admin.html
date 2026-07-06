@@ -1,0 +1,24 @@
+{% extends 'checker/base.html' %}
+{% block title %}Teacher Progress{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ teacher.checker_profile.display_name|default:teacher.username }} — Progress</h1><p class="muted">Click a course to see week details.</p></div>
+  <a class="button" href="{% url 'teacher_progress_teachers_admin' %}">Back</a>
+</div>
+<section class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Class</th><th>Subject</th><th>Total Weeks</th><th>Completed</th><th>Not Completed</th><th>Progress</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.assignment.classroom }}</td><td>{{ row.assignment.subject.name }}</td>
+            <td>{{ row.total }}</td><td>{{ row.completed }}</td><td>{{ row.not_completed }}</td><td>{{ row.progress }}%</td>
+            <td><a class="small-button" href="{% url 'teacher_progress_assignment_detail_admin' row.assignment.id %}">Open Details</a></td>
+          </tr>
+        {% empty %}<tr><td colspan="7">No active courses assigned.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

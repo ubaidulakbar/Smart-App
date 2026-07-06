@@ -1,0 +1,63 @@
+{% extends 'checker/base.html' %}
+{% block title %}Course Progress{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ assignment.classroom }} — {{ assignment.subject.name }}</h1>
+    <p class="muted">Week No is automatic. Not Completed rows can be edited/deleted. Completed rows are locked.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to My Courses</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Total Weeks</span><strong>{{ summary.total }}</strong></div>
+  <div class="stat-card"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
+  <div class="stat-card"><span>Not Completed</span><strong>{{ summary.not_completed }}</strong></div>
+  <div class="stat-card"><span>Progress</span><strong>{{ summary.progress }}%</strong></div>
+</div>
+
+<section class="card narrow">
+  <h2>Add New Week</h2>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary big-action" type="submit">Add Week</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Progress Rows</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Week No</th><th>Detail</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><strong>{{ row.week_no }}</strong></td>
+            <td>{{ row.detail|linebreaksbr }}</td>
+            <td><span class="badge {% if row.status == 'completed' %}success{% else %}pending{% endif %}">{{ row.get_status_display }}</span></td>
+            <td>{{ row.updated_at|date:'d M Y, h:i A' }}</td>
+            <td>
+              {% if row.can_edit %}
+                <div class="actions">
+                  <a class="small-button" href="{% url 'teacher_progress_edit' row.id %}">Edit</a>
+                  <form method="post" action="{% url 'teacher_progress_complete' row.id %}" onsubmit="return confirm('Once completed, this row will be locked. Continue?');">
+                    {% csrf_token %}<button class="small-button primary" type="submit">Completed</button>
+                  </form>
+                  <form method="post" action="{% url 'teacher_progress_delete' row.id %}" onsubmit="return confirm('Delete this not completed row?');">
+                    {% csrf_token %}<button class="small-button danger" type="submit">Delete</button>
+                  </form>
+                </div>
+              {% else %}
+                <div class="actions">
+                  <span class="badge soft">Locked</span>
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}<tr><td colspan="5">No progress rows yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

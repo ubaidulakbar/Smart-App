@@ -1,0 +1,12 @@
+{% extends 'checker/base.html' %}
+{% block title %}Edit User{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Edit User: {{ edited_user.username }}</h1>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

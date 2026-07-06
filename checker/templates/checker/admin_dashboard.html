@@ -1,0 +1,141 @@
+{% extends 'checker/base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Admin Dashboard</h1>
+    <p class="muted">Complete copy-checking overview. Admin users can view and manage records, but cannot lock notebook-checking rows.</p>
+  </div>
+</div>
+
+<div class="admin-action-grid">
+  <a class="admin-action" href="{% url 'class_setup_add' %}"><strong>Add Class</strong><span>Class + subjects + chapter counts</span></a>
+  <a class="admin-action" href="{% url 'student_create' %}"><strong>Add Student</strong><span>Single student entry</span></a>
+  <a class="admin-action" href="{% url 'student_import' %}"><strong>Import Students</strong><span>Excel preview before import</span></a>
+  <a class="admin-action" href="{% url 'attention_list' %}"><strong>Attention List</strong><span>Top 100 neglected items</span></a>
+  <a class="admin-action" href="{% url 'admin_records' %}"><strong>Latest Records</strong><span>Last 50 locked records</span></a>
+  <a class="admin-action {% if pending_requests %}alert-action{% endif %}" href="{% url 'correction_requests_admin' %}"><strong>{% if pending_requests %}★ {% endif %}Copy Requests{% if pending_requests %} ({{ pending_requests }}){% endif %}</strong><span>Approve requested checking values</span></a>
+  <a class="admin-action" href="{% url 'teacher_assignments_admin' %}"><strong>Teacher Assignments</strong><span>Assign one teacher per course</span></a>
+  <a class="admin-action" href="{% url 'teacher_progress_classes_admin' %}"><strong>Progress by Class</strong><span>View all teachers in a class</span></a>
+  <a class="admin-action" href="{% url 'teacher_progress_teachers_admin' %}"><strong>Progress by Teacher</strong><span>View courses teacher-wise</span></a>
+  <a class="admin-action" href="{% url 'admin_users' %}"><strong>Users</strong><span>Add checker/teacher accounts</span></a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Today</span><strong>{{ today_locked }}</strong></div>
+  <div class="stat-card"><span>This Month</span><strong>{{ month_locked }}</strong></div>
+  <div class="stat-card"><span>Overall</span><strong>{{ total_locked }}</strong></div>
+  <div class="stat-card {% if pending_requests %}stat-alert{% endif %}"><span>{% if pending_requests %}★ {% endif %}Copy Requests</span><strong>{{ pending_requests }}</strong></div>
+  <div class="stat-card"><span>Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
+  <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>
+</div>
+
+
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Attention List</h2>
+      <p class="muted small">Preview of class-subject and student records that need checking first.</p>
+    </div>
+    <a class="button" href="{% url 'attention_list' %}">View Top 100</a>
+  </div>
+  <div class="two-col">
+    <div>
+      <h3 class="mini-heading">Class / Subject Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_class_subjects %}
+          <div class="mini-item">
+            <strong>{{ row.classroom }} — {{ row.subject.name }}</strong>
+            <span>Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}% · Pending: {{ row.pending_records }}</span>
+          </div>
+        {% empty %}<p class="muted">No class-subject setup found.</p>{% endfor %}
+      </div>
+    </div>
+    <div>
+      <h3 class="mini-heading">Student Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_students %}
+          <div class="mini-item">
+            <strong>{{ row.student.full_name }}</strong>
+            <span>{{ row.classroom }} · Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}%</span>
+            <a href="{% url 'student_profile' row.student.id %}">Full Profile</a>
+          </div>
+        {% empty %}<p class="muted">No active students found.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Recent Teacher Progress</h2>
+      <p class="muted small">Latest course-progress rows updated by teachers.</p>
+    </div>
+    <a class="button" href="{% url 'teacher_progress_classes_admin' %}">View by Class</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Teacher</th><th>Class</th><th>Subject</th><th>Week</th><th>Status</th><th>Updated</th></tr></thead>
+      <tbody>
+        {% for row in recent_teacher_progress %}
+          <tr>
+            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }}</td>
+            <td>{{ row.assignment.classroom }}</td>
+            <td>{{ row.assignment.subject.name }}</td>
+            <td>{{ row.week_no }}</td>
+            <td>{{ row.get_status_display }}</td>
+            <td>{{ row.updated_at|date:'d M Y, h:i A' }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="6">No teacher progress yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="two-col">
+  <section class="card">
+    <h2>Checker Work This Month</h2>
+    <table>
+      <thead><tr><th>Checker</th><th>Records Locked</th></tr></thead>
+      <tbody>
+        {% for item in checker_stats_month %}
+          <tr><td>{{ item.entered_by__checker_profile__display_name|default:item.entered_by__username }}</td><td>{{ item.total }}</td></tr>
+        {% empty %}<tr><td colspan="2">No records this month.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Checker Work Overall</h2>
+    <table>
+      <thead><tr><th>Checker</th><th>Records Locked</th></tr></thead>
+      <tbody>
+        {% for item in checker_stats_all %}
+          <tr><td>{{ item.entered_by__checker_profile__display_name|default:item.entered_by__username }}</td><td>{{ item.total }}</td></tr>
+        {% empty %}<tr><td colspan="2">No records yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Recent Records</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Student</th><th>Class</th><th>Subject</th><th>Chapter</th><th>Checker</th><th>Locked</th></tr></thead>
+      <tbody>
+        {% for r in recent_records %}
+          <tr>
+            <td><a href="{% url 'student_profile' r.student.id %}">{{ r.student.full_name }}</a></td>
+            <td>{{ r.classroom }}</td><td>{{ r.subject.name }}</td><td>{{ r.chapter.title }}</td>
+            <td>{{ r.entered_by.checker_profile.display_name|default:r.entered_by.username }}</td>
+            <td>{{ r.locked_at|date:'d M Y, h:i A' }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="6">No records yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

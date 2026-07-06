@@ -1,0 +1,14 @@
+{% extends 'checker/base.html' %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<section class="card login-card">
+  <h1>Login</h1>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label>Username {{ form.username }}</label>
+    <label>Password {{ form.password }}</label>
+    <button class="primary" type="submit">Login</button>
+  </form>
+</section>
+{% endblock %}

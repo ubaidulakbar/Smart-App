@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: smart-copy-checking
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: gunicorn smart_copy_checking.wsgi:application
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+      # Add DATABASE_URL manually from your Neon connection string in Render dashboard.
+      # Add CSRF_TRUSTED_ORIGINS after your Render URL is created, for example:
+      # https://smart-copy-checking.onrender.com

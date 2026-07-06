@@ -1,0 +1,36 @@
+{% extends 'checker/base.html' %}
+{% block title %}Course Details{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ assignment.classroom }} — {{ assignment.subject.name }}</h1>
+    <p class="muted">Teacher: {{ assignment.teacher.checker_profile.display_name|default:assignment.teacher.username }}</p>
+  </div>
+</div>
+<div class="stats-grid">
+  <div class="stat-card"><span>Total Weeks</span><strong>{{ summary.total }}</strong></div>
+  <div class="stat-card"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
+  <div class="stat-card"><span>Not Completed</span><strong>{{ summary.not_completed }}</strong></div>
+  <div class="stat-card"><span>Progress</span><strong>{{ summary.progress }}%</strong></div>
+</div>
+<section class="card">
+  <h2>Week Details</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Week No</th><th>Detail</th><th>Status</th><th>Added</th><th>Completed</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><strong>{{ row.week_no }}</strong></td>
+            <td>{{ row.detail|linebreaksbr }}</td>
+            <td><span class="badge {% if row.status == 'completed' %}success{% else %}pending{% endif %}">{{ row.get_status_display }}</span></td>
+            <td>{{ row.created_at|date:'d M Y, h:i A' }}</td>
+            <td>{% if row.completed_at %}{{ row.completed_at|date:'d M Y, h:i A' }}{% else %}—{% endif %}</td>
+            <td><a class="small-button" href="{% url 'teacher_progress_row_edit_admin' row.id %}">Admin Edit</a></td>
+          </tr>
+        {% empty %}<tr><td colspan="6">No week details yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

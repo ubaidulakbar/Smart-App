@@ -1,0 +1,67 @@
+{% extends 'checker/base.html' %}
+{% block title %}Checker Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Checker Dashboard</h1>
+    <p class="muted">Welcome, {{ current_profile.display_name|default:user.username }}.</p>
+  </div>
+  <a class="button primary" href="{% url 'select_checking' %}">Start Checking</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Today</span><strong>{{ today_locked }}</strong></div>
+  <div class="stat-card"><span>This Month</span><strong>{{ month_locked }}</strong></div>
+</div>
+
+
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Attention List</h2>
+      <p class="muted small">Top items that need checking first.</p>
+    </div>
+    <a class="button" href="{% url 'attention_list' %}">View Top 50</a>
+  </div>
+  <div class="two-col">
+    <div>
+      <h3 class="mini-heading">Class / Subject Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_class_subjects %}
+          <div class="mini-item">
+            <strong>{{ row.classroom }} — {{ row.subject.name }}</strong>
+            <span>Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}% · Pending: {{ row.pending_records }}</span>
+            <a href="{% url 'select_checking' %}?classroom={{ row.classroom.id }}&class_subject={{ row.class_subject.id }}">Open</a>
+          </div>
+        {% empty %}<p class="muted">No class-subject setup found.</p>{% endfor %}
+      </div>
+    </div>
+    <div>
+      <h3 class="mini-heading">Student Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_students %}
+          <div class="mini-item">
+            <strong>{{ row.student.full_name }}</strong>
+            <span>{{ row.classroom }} · Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}%</span>
+            <a href="{% url 'student_profile' row.student.id %}">View</a>
+          </div>
+        {% empty %}<p class="muted">No active students found.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Recent Records</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Student</th><th>Subject</th><th>Chapter</th><th>Status</th><th>Locked</th></tr></thead>
+      <tbody>
+        {% for r in recent_records %}
+          <tr><td>{{ r.student.full_name }}</td><td>{{ r.subject.name }}</td><td>{{ r.chapter.title }}</td><td>{{ r.get_status_display }}</td><td>{{ r.locked_at|date:'d M Y, h:i A' }}</td></tr>
+        {% empty %}<tr><td colspan="5">No recent records.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

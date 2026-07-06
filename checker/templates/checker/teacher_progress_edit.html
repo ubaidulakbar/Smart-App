@@ -1,0 +1,14 @@
+{% extends 'checker/base.html' %}
+{% block title %}Edit Week Detail{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Edit Week {{ progress.week_no }}</h1>
+  <p class="muted">Only Not Completed rows can be edited.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Save Changes</button>
+    <a class="button" href="{% url 'teacher_course_detail' progress.assignment_id %}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

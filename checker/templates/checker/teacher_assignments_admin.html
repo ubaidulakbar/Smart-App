@@ -1,0 +1,45 @@
+{% extends 'checker/base.html' %}
+{% block title %}Teacher Assignments{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Teacher Assignments</h1>
+    <p class="muted">Assign one active teacher to each class-subject. Co-teaching is blocked.</p>
+  </div>
+</div>
+
+<section class="card narrow">
+  <h2>Add Assignment</h2>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary big-action" type="submit">Save Assignment</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Assignments</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for item in assignments %}
+          <tr>
+            <td>{{ item.classroom }}</td>
+            <td>{{ item.subject.name }}</td>
+            <td>{{ item.teacher.checker_profile.display_name|default:item.teacher.username }}</td>
+            <td>{% if item.is_active %}<span class="badge success">Active</span>{% else %}<span class="badge soft">Inactive</span>{% endif %}</td>
+            <td>
+              {% if item.is_active %}
+                <form method="post" action="{% url 'teacher_assignment_deactivate' item.id %}" onsubmit="return confirm('Deactivate this assignment? Old progress will remain safe.');">
+                  {% csrf_token %}<button class="small-button danger" type="submit">Deactivate</button>
+                </form>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        {% empty %}<tr><td colspan="5">No assignments yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

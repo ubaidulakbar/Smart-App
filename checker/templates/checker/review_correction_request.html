@@ -1,0 +1,26 @@
+{% extends 'checker/base.html' %}
+{% block title %}Review Correction{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Review Copy Correction Request</h1>
+  <p><strong>{{ record.student.full_name }}</strong> · {{ record.subject.name }} · {{ record.chapter.title }}</p>
+  <div class="locked-box">
+    <h2>Current Values</h2>
+    <p><strong>Status:</strong> {{ record.get_status_display }}</p>
+    <p><strong>Remarks:</strong> {{ record.remarks|default:'No remarks' }}</p>
+    <p><strong>Actual checker:</strong> {{ record.actual_checker_display }}</p>
+  </div>
+  <div class="locked-box">
+    <h2>Requested Values</h2>
+    <p><strong>Status:</strong> {{ correction.get_requested_status_display|default:'—' }}</p>
+    <p><strong>Remarks:</strong> {{ correction.requested_remarks|default:'—' }}</p>
+    <p><strong>Actual checker:</strong> {{ correction.requested_actual_checker_name|default:'Same as entered by' }}</p>
+    <p><strong>Reason:</strong><br>{{ correction.reason|linebreaksbr }}</p>
+  </div>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Submit Decision</button>
+  </form>
+</section>
+{% endblock %}

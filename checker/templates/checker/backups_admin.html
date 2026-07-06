@@ -1,0 +1,29 @@
+{% extends 'checker/base.html' %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Backups</h1>
+    <p class="muted">One JSON backup file per active day. Latest 10 active-day backups are kept.</p>
+    <p class="muted small">For Render/Neon, download backup files regularly. Files saved inside a free Render web service should not be treated as permanent storage.</p>
+  </div>
+  <form method="post" action="{% url 'backup_now' %}">{% csrf_token %}<button class="primary" type="submit">Create & Download Backup Now</button></form>
+</div>
+<section class="card table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>File</th><th>Reason</th><th>Triggered By</th><th>Updated</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for b in backups %}
+        <tr>
+          <td>{{ b.backup_date }}</td>
+          <td>{{ b.file_name }}</td>
+          <td>{{ b.reason }}</td>
+          <td>{{ b.triggered_by.checker_profile.display_name|default:b.triggered_by.username }}</td>
+          <td>{{ b.updated_at|date:'d M Y, h:i A' }}</td>
+          <td><a class="small-button" href="{% url 'backup_download' b.id %}">Download</a></td>
+        </tr>
+      {% empty %}<tr><td colspan="6">No backups yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

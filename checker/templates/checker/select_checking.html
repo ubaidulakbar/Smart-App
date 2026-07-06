@@ -1,0 +1,74 @@
+{% extends 'checker/base.html' %}
+{% block title %}Select Checking{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Select Copy Checking</h1>
+  <p class="muted">Select class, subject, and chapter on one screen, then load the student list.</p>
+  <form method="get" class="form-stack quick-select-form">
+    {{ form.non_field_errors }}
+    <label>{{ form.classroom.label }} {{ form.classroom }}</label>
+    <label>Subject
+      <select name="class_subject" id="id_class_subject" required>
+        <option value="">Select subject</option>
+      </select>
+    </label>
+    <label>Chapter
+      <select name="chapter" id="id_chapter" required>
+        <option value="">Select chapter</option>
+      </select>
+    </label>
+    <button class="primary big-action" type="submit">Show Students</button>
+  </form>
+</section>
+{{ selection_data|json_script:"selection-data" }}
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('selection-data').textContent);
+  const classroomSelect = document.getElementById('id_classroom');
+  const subjectSelect = document.getElementById('id_class_subject');
+  const chapterSelect = document.getElementById('id_chapter');
+  const selectedClassSubject = "{{ selected_class_subject|escapejs }}";
+  const selectedChapter = "{{ selected_chapter|escapejs }}";
+
+  function resetSelect(select, placeholder) {
+    select.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = placeholder;
+    select.appendChild(option);
+  }
+
+  function loadSubjects() {
+    const classroomId = classroomSelect.value;
+    resetSelect(subjectSelect, 'Select subject');
+    resetSelect(chapterSelect, 'Select chapter');
+    data.filter(item => item.classroom_id === classroomId).forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.class_subject_id;
+      option.textContent = item.subject_name;
+      if (item.class_subject_id === selectedClassSubject) option.selected = true;
+      subjectSelect.appendChild(option);
+    });
+    loadChapters();
+  }
+
+  function loadChapters() {
+    const subjectId = subjectSelect.value;
+    resetSelect(chapterSelect, 'Select chapter');
+    const item = data.find(item => item.class_subject_id === subjectId);
+    if (!item) return;
+    item.chapters.forEach(chapter => {
+      const option = document.createElement('option');
+      option.value = chapter.id;
+      option.textContent = chapter.title;
+      if (chapter.id === selectedChapter) option.selected = true;
+      chapterSelect.appendChild(option);
+    });
+  }
+
+  classroomSelect.addEventListener('change', loadSubjects);
+  subjectSelect.addEventListener('change', loadChapters);
+  loadSubjects();
+})();
+</script>
+{% endblock %}

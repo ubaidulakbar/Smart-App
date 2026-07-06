@@ -1,0 +1,31 @@
+{% extends 'checker/base.html' %}
+{% block title %}Classes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Classes</h1>
+    <p class="muted">Create a class with its subjects and chapter counts first.</p>
+  </div>
+  <a class="button primary" href="{% url 'class_setup_add' %}">Add Class</a>
+</div>
+
+<section class="card table-wrap">
+  <table>
+    <thead><tr><th>Class</th><th>Subjects</th><th>Students</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for c in classes %}
+        <tr>
+          <td>{{ c }}</td>
+          <td>
+            {% for cs in c.class_subjects.all %}
+              {% if cs.is_active %}<span class="badge soft">{{ cs.subject.name }}: {{ cs.chapter_count }}</span>{% endif %}
+            {% empty %}—{% endfor %}
+          </td>
+          <td>{{ c.students.count }}</td>
+          <td><a href="{% url 'class_setup_edit' c.id %}">Edit</a> · <a href="{% url 'student_create' %}?classroom={{ c.id }}">Add Student</a></td>
+        </tr>
+      {% empty %}<tr><td colspan="4">No classes yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

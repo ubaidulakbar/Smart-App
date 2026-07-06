@@ -1,0 +1,19 @@
+{% extends 'checker/base.html' %}
+{% block title %}Request Correction{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Request Correction</h1>
+  <p><strong>{{ record.student.full_name }}</strong> · {{ record.subject.name }} · {{ record.chapter.title }}</p>
+  <div class="locked-box">
+    <p><strong>Current status:</strong> {{ record.get_status_display }}</p>
+    <p><strong>Current remarks:</strong> {{ record.remarks|default:'No remarks' }}</p>
+    <p><strong>Current actual checker:</strong> {{ record.actual_checker_display }}</p>
+  </div>
+  <p class="muted">Enter the new values you want admin to approve. If approved, the record will update automatically.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Send Request</button>
+  </form>
+</section>
+{% endblock %}

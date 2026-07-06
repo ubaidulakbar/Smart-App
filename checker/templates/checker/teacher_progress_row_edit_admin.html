@@ -1,0 +1,19 @@
+{% extends 'checker/base.html' %}
+{% block title %}Edit Teacher Progress{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Admin Edit — Week {{ progress.week_no }}</h1>
+    <p class="muted">{{ assignment.classroom }} — {{ assignment.subject.name }} · Teacher: {{ assignment.teacher.checker_profile.display_name|default:assignment.teacher.username }}</p>
+  </div>
+  <a class="button" href="{% url 'teacher_progress_assignment_detail_admin' assignment.id %}">Back to Course</a>
+</div>
+<section class="card narrow">
+  <p class="message warning">Admin edits are allowed for correction purposes. The action will be saved in the action log and included in backups.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary big-action" type="submit">Save Admin Correction</button>
+  </form>
+</section>
+{% endblock %}

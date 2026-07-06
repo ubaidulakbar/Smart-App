@@ -1,0 +1,94 @@
+{% extends 'checker/base.html' %}
+{% block title %}Import Students{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Import Students</h1>
+    <p class="muted">Excel format: Column A = student name, Column B = roll no. The first row is treated as data, not a header.</p>
+  </div>
+</div>
+
+<section class="card narrow">
+  <form method="post" enctype="multipart/form-data" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary big-action" type="submit">Preview Import</button>
+  </form>
+</section>
+
+{% if preview %}
+  <section class="card">
+    <h2>Preview for {{ preview.classroom }}</h2>
+    <p class="muted">Valid rows are ready for import. Problem rows will not be imported; they are left for manual entry or file correction.</p>
+    <div class="stats-grid">
+      <div class="stat-card"><span>Ready to Import</span><strong>{{ preview.valid_rows|length }}</strong></div>
+      <div class="stat-card"><span>Problem Rows</span><strong>{{ preview.problem_rows|length }}</strong></div>
+    </div>
+    {% if preview.valid_rows %}
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <input type="hidden" name="confirm_import" value="1">
+        <button class="primary big-action" type="submit">Confirm Import {{ preview.valid_rows|length }} Student(s)</button>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="card table-wrap">
+    <h2>Valid Rows</h2>
+    <table>
+      <thead><tr><th>Excel Row</th><th>Name</th><th>Roll No</th></tr></thead>
+      <tbody>
+        {% for row in preview.valid_rows %}
+          <tr><td>{{ row.row_number }}</td><td>{{ row.name }}</td><td>{{ row.roll_no }}</td></tr>
+        {% empty %}<tr><td colspan="3">No valid rows.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card table-wrap">
+    <h2>Problem Rows Not Imported</h2>
+    <table>
+      <thead><tr><th>Excel Row</th><th>Name</th><th>Roll No</th><th>Problem</th></tr></thead>
+      <tbody>
+        {% for row in preview.problem_rows %}
+          <tr class="pending-row"><td>{{ row.row_number }}</td><td>{{ row.name|default:'—' }}</td><td>{{ row.roll_no|default:'—' }}</td><td>{{ row.problem }}</td></tr>
+        {% empty %}<tr><td colspan="4">No problems found.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
+
+{% if result %}
+  <section class="card">
+    <h2>Import Result for {{ result.classroom }}</h2>
+    <p><strong>{{ result.imported|length }}</strong> student(s) imported.</p>
+    {% if result.skipped %}<p class="message warning">{{ result.skipped|length }} row(s) were not imported because a problem was found during final saving.</p>{% endif %}
+  </section>
+
+  <section class="card table-wrap">
+    <h2>Imported Students</h2>
+    <table>
+      <thead><tr><th>Roll No</th><th>Name</th><th>Profile</th></tr></thead>
+      <tbody>
+        {% for s in result.imported %}
+          <tr><td>{{ s.roll_no }}</td><td>{{ s.full_name }}</td><td><a href="{% url 'student_profile' s.id %}">Open</a></td></tr>
+        {% empty %}<tr><td colspan="3">No students imported.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {% if result.skipped %}
+    <section class="card table-wrap">
+      <h2>Rows Left for Entry</h2>
+      <table>
+        <thead><tr><th>Excel Row</th><th>Name</th><th>Roll No</th><th>Problem</th></tr></thead>
+        <tbody>
+          {% for row in result.skipped %}
+            <tr class="pending-row"><td>{{ row.row_number }}</td><td>{{ row.name }}</td><td>{{ row.roll_no }}</td><td>{{ row.problem }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+{% endif %}
+{% endblock %}
