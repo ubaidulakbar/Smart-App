@@ -42,26 +42,6 @@ This version is ready for:
 
 Run the seed command to create missing users:
 
-```text
-Admin:
-username: admin
-password: {SmartChecking2026}
-
-Checkers:
-username: kiran
-password: 3J3te2@
-
-username: Shaista
-password: o/V3D30
-
-username: Naila
-password: wB888:l
-
-Teacher:
-username: Fawad
-password: C279l[
-```
-
 Passwords are stored by Django as secure hashes for login. The app also keeps an admin-visible password note because that was requested for school account management.
 
 Important: `seed_initial_users` now creates missing initial users only. It does not overwrite existing user passwords on redeploy. To intentionally reset them, run:
