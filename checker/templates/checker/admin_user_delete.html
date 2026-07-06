@@ -1,0 +1,18 @@
+{% extends 'checker/base.html' %}
+{% block title %}Delete User{% endblock %}
+{% block content %}
+<section class="card narrow danger-zone">
+  <h1>Delete User: {{ deleted_user.username }}</h1>
+  <p><strong>Name:</strong> {{ profile.display_name|default:deleted_user.username }}</p>
+  <p><strong>Role:</strong> {{ profile.get_role_display|default:'—' }}</p>
+  <p class="muted">This will permanently delete the user only if the user has no existing records. If the user has checking, teacher, correction, or backup history, deletion will be blocked to protect old records. In that case, edit the user and make them inactive.</p>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="button-row">
+      <button class="danger" type="submit">Delete User</button>
+      <a class="button" href="{% url 'admin_users' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

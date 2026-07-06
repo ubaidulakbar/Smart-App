@@ -3,10 +3,15 @@
 {% block content %}
 <section class="card narrow">
   <h1>Edit User: {{ edited_user.username }}</h1>
+  <p class="muted">This page changes the user's name, role, and active status. To change the real login password, use the Reset Password page.</p>
   <form method="post" class="form-stack">
     {% csrf_token %}
     {{ form.as_p }}
-    <button class="primary" type="submit">Save</button>
+    <div class="button-row">
+      <button class="primary" type="submit">Save</button>
+      <a class="button" href="{% url 'admin_user_reset_password' edited_user.id %}">Reset Password</a>
+      <a class="button" href="{% url 'admin_users' %}">Back</a>
+    </div>
   </form>
 </section>
 {% endblock %}

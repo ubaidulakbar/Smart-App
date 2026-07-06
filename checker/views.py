@@ -1,9 +1,10 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.db.models import Count, Max, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -27,6 +28,7 @@ from .forms import (
     TeacherCourseAssignmentForm,
     TeacherProgressForm,
     UserCreateByAdminForm,
+    UserDeleteConfirmForm,
     UserProfileForm,
 )
 from .models import (
@@ -898,15 +900,63 @@ def admin_user_reset_password(request, user_id):
             password = form.cleaned_data['new_password']
             user.set_password(password)
             user.save(update_fields=['password'])
+            if not user.check_password(password):
+                messages.error(request, 'Password could not be verified after saving. Please try again.')
+                return redirect('admin_user_reset_password', user_id=user.id)
             if form.cleaned_data['keep_visible_note']:
                 profile.initial_password_note = password
                 profile.save(update_fields=['initial_password_note'])
+            if user.pk == request.user.pk:
+                update_session_auth_hash(request, user)
             log_action(request.user, 'RESET_PASSWORD', profile, f'Reset password for {user.username}')
-            messages.success(request, 'Password reset successfully.')
+            ensure_daily_backup(reason='Admin reset a user password', user=request.user)
+            messages.success(request, 'Login password reset successfully. The visible password note was updated too.')
             return redirect('admin_users')
     else:
         form = PasswordResetByAdminForm()
     return render(request, 'checker/admin_user_reset_password.html', {'form': form, 'edited_user': user})
+
+
+@app_admin_required
+def admin_user_delete(request, user_id):
+    user = get_object_or_404(User.objects.select_related('checker_profile'), pk=user_id)
+    profile = getattr(user, 'checker_profile', None)
+
+    if user.pk == request.user.pk:
+        messages.error(request, 'You cannot delete the account you are currently using.')
+        return redirect('admin_users')
+
+    active_admin_count = UserProfile.objects.filter(
+        role=UserProfile.ROLE_ADMIN,
+        is_active_checker=True,
+        user__is_active=True,
+    ).count()
+    if profile and profile.role == UserProfile.ROLE_ADMIN and active_admin_count <= 1:
+        messages.error(request, 'You cannot delete the last active admin account.')
+        return redirect('admin_users')
+
+    if request.method == 'POST':
+        form = UserDeleteConfirmForm(request.POST)
+        if form.is_valid():
+            username = user.username
+            display_name = profile.display_name if profile else username
+            try:
+                with transaction.atomic():
+                    user.delete()
+            except ProtectedError:
+                messages.error(
+                    request,
+                    'This user already has checking, correction, teacher, or backup records. For data safety, it cannot be deleted. Open Edit and make the user inactive instead.'
+                )
+                return redirect('admin_users')
+            log_action(request.user, 'DELETE_USER', None, f'Deleted user {username} ({display_name})')
+            ensure_daily_backup(reason='Admin deleted a user', user=request.user)
+            messages.success(request, f'User {username} was deleted.')
+            return redirect('admin_users')
+    else:
+        form = UserDeleteConfirmForm()
+
+    return render(request, 'checker/admin_user_delete.html', {'form': form, 'deleted_user': user, 'profile': profile})
 
 
 @app_admin_required

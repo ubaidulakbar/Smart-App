@@ -226,3 +226,11 @@ button.danger:hover, .button.danger:hover, .small-button.danger:hover { backgrou
   background: #fffbeb;
 }
 .stat-card.stat-alert span, .stat-card.stat-alert strong { color: #92400e; }
+.actions-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.button-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.button.small { min-height: 34px; padding: 7px 10px; font-size: 13px; width: max-content; }
+.danger-zone { border-color: #fecaca; }
+@media (max-width: 760px) {
+  .actions-inline, .button-row { display: grid; grid-template-columns: 1fr; }
+  .button.small { width: 100%; }
+}

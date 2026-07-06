@@ -33,6 +33,7 @@ urlpatterns = [
     path('users/add/', views.admin_user_create, name='admin_user_create'),
     path('users/<int:user_id>/edit/', views.admin_user_edit, name='admin_user_edit'),
     path('users/<int:user_id>/reset-password/', views.admin_user_reset_password, name='admin_user_reset_password'),
+    path('users/<int:user_id>/delete/', views.admin_user_delete, name='admin_user_delete'),
 
     path('teacher-assignments/', views.teacher_assignments_admin, name='teacher_assignments_admin'),
     path('teacher-assignments/<int:assignment_id>/deactivate/', views.teacher_assignment_deactivate, name='teacher_assignment_deactivate'),

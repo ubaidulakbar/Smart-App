@@ -108,11 +108,17 @@ class PasswordResetByAdminForm(forms.Form):
 class UserProfileForm(forms.ModelForm):
     class Meta:
         model = UserProfile
-        fields = ['display_name', 'role', 'initial_password_note', 'is_active_checker']
+        fields = ['display_name', 'role', 'is_active_checker']
         labels = {
             'is_active_checker': 'Active user',
-            'initial_password_note': 'Visible password note',
         }
+
+
+class UserDeleteConfirmForm(forms.Form):
+    confirm = forms.BooleanField(
+        required=True,
+        label='Yes, I am sure I want to delete this user',
+    )
 
 
 class UserCreateByAdminForm(forms.Form):

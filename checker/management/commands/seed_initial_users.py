@@ -49,9 +49,18 @@ INITIAL_USERS = [
 
 
 class Command(BaseCommand):
-    help = 'Create missing initial admin/checker/teacher accounts. Existing users are not overwritten unless --reset-passwords is used.'
+    help = (
+        'Create initial admin/checker/teacher accounts only for an empty database. '
+        'Existing users are not overwritten. Use --create-missing to add missing default users, '
+        'or --reset-passwords to restore the default initial users.'
+    )
 
     def add_arguments(self, parser):
+        parser.add_argument(
+            '--create-missing',
+            action='store_true',
+            help='Create any missing initial users without changing existing users.',
+        )
         parser.add_argument(
             '--reset-passwords',
             action='store_true',
@@ -59,7 +68,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        create_missing = options['create_missing']
         reset_passwords = options['reset_passwords']
+
+        if User.objects.exists() and not create_missing and not reset_passwords:
+            self.stdout.write(self.style.WARNING(
+                'Users already exist. Seed skipped so admin changes, password resets, and deleted users are preserved.'
+            ))
+            self.stdout.write(self.style.WARNING(
+                'Use --create-missing only if you intentionally want to recreate missing default users.'
+            ))
+            return
+
         for item in INITIAL_USERS:
             user, created = User.objects.get_or_create(username=item['username'])
 
