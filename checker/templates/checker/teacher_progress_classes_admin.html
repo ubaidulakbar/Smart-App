@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><h1>Teacher Progress by Class</h1><p class="muted">Open a class to see all courses and teachers.</p></div>
+  <div class="button-row"><a class="button" href="{% url 'teacher_progress_export' %}">Export Excel</a><a class="button" href="{% url 'admin_teaching_side' %}">Teaching Side</a></div>
 </div>
 <section class="card">
   <div class="admin-action-grid">

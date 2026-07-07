@@ -4,24 +4,17 @@
 <div class="page-head">
   <div>
     <h1>Users and Login Details</h1>
-    <p class="muted">Use <strong>Reset Password</strong> to change the real login password. The visible password is only updated from that reset page.</p>
+    <p class="muted">Admin + checkers are shown first. Use <strong>Reset Password</strong> to change the real login password.</p>
   </div>
   <a class="button primary" href="{% url 'admin_user_create' %}">Add User</a>
 </div>
+
 <section class="card table-wrap">
+  <h2>Admin + Checkers</h2>
   <table>
-    <thead>
-      <tr>
-        <th>Username</th>
-        <th>Name</th>
-        <th>Role</th>
-        <th>Visible Password</th>
-        <th>Active</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Visible Password</th><th>Active</th><th>Actions</th></tr></thead>
     <tbody>
-      {% for u in users %}
+      {% for u in admin_checker_users %}
         <tr>
           <td>{{ u.username }}</td>
           <td>{{ u.checker_profile.display_name|default:u.username }}</td>
@@ -31,14 +24,32 @@
           <td class="actions-inline">
             <a class="button small" href="{% url 'admin_user_edit' u.id %}">Edit</a>
             <a class="button small primary" href="{% url 'admin_user_reset_password' u.id %}">Reset Password</a>
-            {% if u.id != request.user.id %}
-              <a class="button small danger" href="{% url 'admin_user_delete' u.id %}">Delete</a>
-            {% endif %}
+            {% if u.id != request.user.id %}<a class="button small danger" href="{% url 'admin_user_delete' u.id %}">Delete</a>{% endif %}
           </td>
         </tr>
-      {% empty %}
-        <tr><td colspan="6">No users.</td></tr>
-      {% endfor %}
+      {% empty %}<tr><td colspan="6">No admin/checker users.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card table-wrap">
+  <h2>Teachers</h2>
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Visible Password</th><th>Active</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for u in teacher_users %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.checker_profile.display_name|default:u.username }}</td>
+          <td>{{ u.checker_profile.initial_password_note|default:'—' }}</td>
+          <td>{{ u.is_active|yesno:'Yes,No' }}</td>
+          <td class="actions-inline">
+            <a class="button small" href="{% url 'admin_user_edit' u.id %}">Edit</a>
+            <a class="button small primary" href="{% url 'admin_user_reset_password' u.id %}">Reset Password</a>
+            <a class="button small danger" href="{% url 'admin_user_delete' u.id %}">Delete</a>
+          </td>
+        </tr>
+      {% empty %}<tr><td colspan="5">No teacher users.</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>

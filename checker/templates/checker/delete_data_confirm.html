@@ -1,0 +1,28 @@
+{% extends 'checker/base.html' %}
+{% block title %}Confirm Delete{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Confirm Delete</h1>
+    <p class="muted">This action can remove related records. A backup will be created before deletion.</p>
+  </div>
+  <a class="button" href="{% url 'delete_data_admin' %}?category={{ category }}">Cancel</a>
+</div>
+
+<section class="card danger-zone">
+  <h2>Items to delete: {{ selected_labels|length }}</h2>
+  <ul class="danger-list">
+    {% for label in selected_labels %}<li>{{ label }}</li>{% endfor %}
+  </ul>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    <input type="hidden" name="category" value="{{ category }}">
+    <input type="hidden" name="mode" value="{{ mode }}">
+    {% for id in selected_ids %}<input type="hidden" name="selected_ids" value="{{ id }}">{% endfor %}
+    <label>Type DELETE to confirm
+      <input type="text" name="confirm_text" required>
+    </label>
+    <button class="danger big-action" type="submit">Delete Now</button>
+  </form>
+</section>
+{% endblock %}

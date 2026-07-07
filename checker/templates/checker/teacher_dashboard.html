@@ -4,23 +4,42 @@
 <div class="page-head">
   <div>
     <h1>Teacher Dashboard</h1>
-    <p class="muted">Welcome, {{ current_profile.display_name|default:user.username }}. Open a course to add weekly progress.</p>
+    <p class="muted">Welcome, {{ current_profile.display_name|default:user.username }}. Pending weeks are shown first.</p>
   </div>
+  <a class="button primary" href="{% url 'teacher_quick_update' %}">Quick Update</a>
 </div>
 
 <div class="stats-grid">
   <div class="stat-card"><span>Assigned Courses</span><strong>{{ assignment_rows|length }}</strong></div>
-  <div class="stat-card"><span>Not Completed Rows</span><strong>{{ pending_rows }}</strong></div>
-  <div class="stat-card"><span>Completed Rows</span><strong>{{ completed_rows }}</strong></div>
+  <div class="stat-card {% if pending_rows %}stat-alert{% endif %}"><span>Pending Weeks</span><strong>{{ pending_rows }}</strong></div>
+  <div class="stat-card"><span>Completed Weeks</span><strong>{{ completed_rows }}</strong></div>
 </div>
+
+{% if quick_pending_rows %}
+<section class="card">
+  <div class="section-head">
+    <div><h2>Quick Pending Work</h2><p class="muted small">First few pending rows from all assigned courses.</p></div>
+    <a class="button" href="{% url 'teacher_quick_update' %}">Open All Pending</a>
+  </div>
+  <div class="mini-list">
+    {% for row in quick_pending_rows %}
+      <div class="mini-item {% if row.needs_attention %}needs-attention{% endif %}">
+        <strong>{{ row.assignment.classroom }} — {{ row.assignment.subject.name }} — Week {{ row.week_no }}</strong>
+        <span>Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</span>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="card">
   <h2>My Courses</h2>
   <div class="admin-action-grid">
     {% for row in assignment_rows %}
-      <a class="admin-action" href="{% url 'teacher_course_detail' row.assignment.id %}">
+      <a class="admin-action {% if row.not_completed %}pending-course{% endif %}" href="{% url 'teacher_course_detail' row.assignment.id %}">
         <strong>{{ row.assignment.classroom }} — {{ row.assignment.subject.name }}</strong>
-        <span>Completed: {{ row.completed }} / {{ row.total }} · Progress: {{ row.progress }}%</span>
+        <span>Pending: {{ row.not_completed }} · Completed: {{ row.completed }} / {{ row.total }} · Progress: {{ row.progress }}%</span>
+        <span>{% if row.last_completed_week %}Last completed: Week {{ row.last_completed_week }}{% else %}No completed week yet{% endif %}</span>
       </a>
     {% empty %}
       <p class="muted">No courses assigned yet. Ask admin to assign class-subjects to your account.</p>

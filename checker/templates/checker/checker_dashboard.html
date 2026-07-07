@@ -14,14 +14,10 @@
   <div class="stat-card"><span>This Month</span><strong>{{ month_locked }}</strong></div>
 </div>
 
-
 <section class="card">
   <div class="section-head">
-    <div>
-      <h2>Attention List</h2>
-      <p class="muted small">Top items that need checking first.</p>
-    </div>
-    <a class="button" href="{% url 'attention_list' %}">View Top 50</a>
+    <div><h2>Attention List</h2><p class="muted small">Top 3 items that need checking first.</p></div>
+    <a class="button" href="{% url 'attention_list' %}?show=more">Show More: Top 10</a>
   </div>
   <div class="two-col">
     <div>

@@ -4,58 +4,57 @@
 <div class="page-head">
   <div>
     <h1>{{ assignment.classroom }} — {{ assignment.subject.name }}</h1>
-    <p class="muted">Week No is automatic. Not Completed rows can be edited/deleted. Completed rows are locked.</p>
+    <p class="muted">Week rows are issued by admin. Enter detail before marking a pending week completed.</p>
   </div>
-  <a class="button" href="{% url 'dashboard' %}">Back to My Courses</a>
+  <div class="button-row">
+    <a class="button" href="{% url 'teacher_quick_update' %}">Quick Update</a>
+    <a class="button" href="{% url 'dashboard' %}">Back to My Courses</a>
+  </div>
 </div>
 
 <div class="stats-grid">
   <div class="stat-card"><span>Total Weeks</span><strong>{{ summary.total }}</strong></div>
   <div class="stat-card"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
-  <div class="stat-card"><span>Not Completed</span><strong>{{ summary.not_completed }}</strong></div>
+  <div class="stat-card {% if summary.not_completed %}stat-alert{% endif %}"><span>Not Completed</span><strong>{{ summary.not_completed }}</strong></div>
   <div class="stat-card"><span>Progress</span><strong>{{ summary.progress }}%</strong></div>
 </div>
 
-<section class="card narrow">
-  <h2>Add New Week</h2>
-  <form method="post" class="form-stack">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button class="primary big-action" type="submit">Add Week</button>
-  </form>
+<section class="card">
+  <h2>Pending Weeks</h2>
+  <div class="pending-week-list">
+    {% for row in pending_rows %}
+      <form method="post" action="{% url 'teacher_progress_complete' row.id %}" class="pending-week-card {% if row.needs_attention %}needs-attention{% endif %}" onsubmit="return confirm('Once completed, this week will be locked. Continue?');">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'teacher_course_detail' assignment.id %}">
+        <div>
+          <strong>Week {{ row.week_no }}</strong>
+          <p class="muted small">Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</p>
+        </div>
+        <label>Week detail
+          <textarea name="detail" rows="3" required placeholder="Write what was completed this week...">{{ row.detail }}</textarea>
+        </label>
+        <button class="primary" type="submit">Mark Completed</button>
+      </form>
+    {% empty %}
+      <p class="muted">No pending weeks for this course.</p>
+    {% endfor %}
+  </div>
 </section>
 
 <section class="card">
-  <h2>Progress Rows</h2>
+  <h2>Completed / Locked Weeks</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Week No</th><th>Detail</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead>
+      <thead><tr><th>Week No</th><th>Detail</th><th>Status</th><th>Completed</th></tr></thead>
       <tbody>
-        {% for row in rows %}
+        {% for row in completed_rows %}
           <tr>
             <td><strong>{{ row.week_no }}</strong></td>
             <td>{{ row.detail|linebreaksbr }}</td>
-            <td><span class="badge {% if row.status == 'completed' %}success{% else %}pending{% endif %}">{{ row.get_status_display }}</span></td>
-            <td>{{ row.updated_at|date:'d M Y, h:i A' }}</td>
-            <td>
-              {% if row.can_edit %}
-                <div class="actions">
-                  <a class="small-button" href="{% url 'teacher_progress_edit' row.id %}">Edit</a>
-                  <form method="post" action="{% url 'teacher_progress_complete' row.id %}" onsubmit="return confirm('Once completed, this row will be locked. Continue?');">
-                    {% csrf_token %}<button class="small-button primary" type="submit">Completed</button>
-                  </form>
-                  <form method="post" action="{% url 'teacher_progress_delete' row.id %}" onsubmit="return confirm('Delete this not completed row?');">
-                    {% csrf_token %}<button class="small-button danger" type="submit">Delete</button>
-                  </form>
-                </div>
-              {% else %}
-                <div class="actions">
-                  <span class="badge soft">Locked</span>
-                </div>
-              {% endif %}
-            </td>
+            <td><span class="badge success">{{ row.get_status_display }}</span></td>
+            <td>{% if row.completed_at %}{{ row.completed_at|date:'d M Y, h:i A' }}{% else %}—{% endif %}</td>
           </tr>
-        {% empty %}<tr><td colspan="5">No progress rows yet.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="4">No completed rows yet.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

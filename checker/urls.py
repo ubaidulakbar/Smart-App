@@ -8,12 +8,16 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('attention/', views.attention_list, name='attention_list'),
+    path('checking-side/', views.admin_checking_side, name='admin_checking_side'),
+    path('teaching-side/', views.admin_teaching_side, name='admin_teaching_side'),
+    path('delete-data/', views.delete_data_admin, name='delete_data_admin'),
 
     path('check/select/', views.select_checking, name='select_checking'),
     path('check/list/', views.checking_list, name='checking_list'),
     path('check/lock/', views.lock_record, name='lock_record'),
     path('check/record/<int:record_id>/request-correction/', views.request_correction, name='request_correction'),
 
+    path('teacher/quick-update/', views.teacher_quick_update, name='teacher_quick_update'),
     path('teacher/course/<int:assignment_id>/', views.teacher_course_detail, name='teacher_course_detail'),
     path('teacher/progress/<int:progress_id>/edit/', views.teacher_progress_edit, name='teacher_progress_edit'),
     path('teacher/progress/<int:progress_id>/delete/', views.teacher_progress_delete, name='teacher_progress_delete'),
@@ -36,6 +40,8 @@ urlpatterns = [
     path('users/<int:user_id>/delete/', views.admin_user_delete, name='admin_user_delete'),
 
     path('teacher-assignments/', views.teacher_assignments_admin, name='teacher_assignments_admin'),
+    path('teacher-progress/issue-week/', views.issue_week_admin, name='issue_week_admin'),
+    path('teacher-progress/export/', views.teacher_progress_export, name='teacher_progress_export'),
     path('teacher-assignments/<int:assignment_id>/deactivate/', views.teacher_assignment_deactivate, name='teacher_assignment_deactivate'),
     path('teacher-progress/classes/', views.teacher_progress_classes_admin, name='teacher_progress_classes_admin'),
     path('teacher-progress/classes/<int:class_id>/', views.teacher_progress_class_detail_admin, name='teacher_progress_class_detail_admin'),

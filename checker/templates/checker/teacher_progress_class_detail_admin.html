@@ -4,6 +4,7 @@
 <div class="page-head">
   <div><h1>{{ classroom }} — Teacher Progress</h1><p class="muted">Click a course to see week details.</p></div>
   <a class="button" href="{% url 'teacher_progress_classes_admin' %}">Back</a>
+  <div class="button-row"><a class="button" href="{% url 'teacher_progress_export' %}">Export Excel</a><a class="button" href="{% url 'admin_teaching_side' %}">Teaching Side</a></div>
 </div>
 <section class="card">
   <div class="table-wrap">

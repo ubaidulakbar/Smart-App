@@ -1,0 +1,43 @@
+{% extends 'checker/base.html' %}
+{% block title %}Issue New Week{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Issue New Week</h1>
+    <p class="muted">The next week number is always highest existing week + 1.</p>
+  </div>
+  <a class="button" href="{% url 'admin_teaching_side' %}">Back to Teaching Side</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>New Week No</span><strong>{{ next_week_no }}</strong></div>
+</div>
+
+<section class="card narrow">
+  <h2>Scope</h2>
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="button-row">
+      <button class="button" type="submit" name="preview" value="1">Preview</button>
+      <button class="primary" type="submit" name="confirm" value="yes" onclick="return confirm('Issue Week {{ next_week_no }} for the selected scope?');">Issue Week {{ next_week_no }}</button>
+    </div>
+  </form>
+</section>
+
+{% if preview_assignments is not None %}
+<section class="card">
+  <h2>Preview: {{ preview_assignments|length }} assignment(s)</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Class</th><th>Subject</th><th>Teacher</th></tr></thead>
+      <tbody>
+        {% for item in preview_assignments %}
+          <tr><td>{{ item.classroom }}</td><td>{{ item.subject.name }}</td><td>{{ item.teacher.checker_profile.display_name|default:item.teacher.username }}</td></tr>
+        {% empty %}<tr><td colspan="3">No active assignments match this scope.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

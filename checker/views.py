@@ -6,13 +6,13 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.db.models import Count, Max, Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from .decorators import app_admin_required, checker_required, teacher_required, is_app_admin, is_teacher_user
 from .forms import (
@@ -26,7 +26,9 @@ from .forms import (
     StudentForm,
     StudentImportUploadForm,
     TeacherCourseAssignmentForm,
+    TeacherCompleteForm,
     TeacherProgressForm,
+    IssueWeekForm,
     UserCreateByAdminForm,
     UserDeleteConfirmForm,
     UserProfileForm,
@@ -42,6 +44,7 @@ from .models import (
     Subject,
     TeacherCourseAssignment,
     TeacherCourseProgress,
+    TeacherProgressCorrectionRequest,
     UserProfile,
 )
 from .utils import ensure_daily_backup, get_backup_path, log_action
@@ -70,6 +73,18 @@ def _progress_percent(checked, expected):
     if expected <= 0:
         return 0
     return round((checked / expected) * 100)
+
+
+
+
+def _teacher_pending_progress_rows(rows):
+    result = []
+    for row in rows:
+        row.days_pending = _days_since(row.created_at) or 0
+        row.needs_attention = row.days_pending >= 3
+        result.append(row)
+    result.sort(key=lambda item: (-item.days_pending, item.assignment.classroom.name, item.assignment.subject.name, -item.week_no))
+    return result
 
 
 def _last_checker_name(record):
@@ -292,18 +307,6 @@ def dashboard(request):
     if is_app_admin(request.user):
         today = timezone.localdate()
         month_start = today.replace(day=1)
-        checker_stats_month = (
-            CopyCheckRecord.objects.filter(locked=True, locked_at__date__gte=month_start)
-            .values('entered_by__username', 'entered_by__checker_profile__display_name')
-            .annotate(total=Count('id'))
-            .order_by('-total')
-        )
-        checker_stats_all = (
-            CopyCheckRecord.objects.filter(locked=True)
-            .values('entered_by__username', 'entered_by__checker_profile__display_name')
-            .annotate(total=Count('id'))
-            .order_by('-total')
-        )
         pending_requests = CorrectionRequest.objects.filter(status=CorrectionRequest.STATUS_PENDING).count()
         context = {
             'total_locked': CopyCheckRecord.objects.filter(locked=True).count(),
@@ -311,19 +314,8 @@ def dashboard(request):
             'today_locked': CopyCheckRecord.objects.filter(locked=True, locked_at__date=today).count(),
             'pending_requests': pending_requests,
             'teacher_assignments_count': TeacherCourseAssignment.objects.filter(is_active=True).count(),
+            'teacher_pending_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_NOT_COMPLETED).count(),
             'teacher_completed_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_COMPLETED).count(),
-            'checker_stats_month': checker_stats_month,
-            'checker_stats_all': checker_stats_all,
-            'recent_records': CopyCheckRecord.objects.select_related(
-                'student', 'classroom', 'class_subject__subject', 'chapter', 'entered_by'
-            )[:12],
-            'recent_teacher_progress': TeacherCourseProgress.objects.select_related(
-                'assignment__teacher__checker_profile',
-                'assignment__class_subject__classroom',
-                'assignment__class_subject__subject',
-            ).order_by('-updated_at')[:8],
-            'attention_class_subjects': _attention_class_subject_rows(5),
-            'attention_students': _attention_student_rows(5),
         }
         return render(request, 'checker/admin_dashboard.html', context)
 
@@ -337,22 +329,39 @@ def dashboard(request):
         ).select_related('class_subject__classroom', 'class_subject__subject').annotate(
             total_weeks=Count('progress_rows'),
             completed_weeks=Count('progress_rows', filter=Q(progress_rows__status=TeacherCourseProgress.STATUS_COMPLETED)),
+            pending_weeks=Count('progress_rows', filter=Q(progress_rows__status=TeacherCourseProgress.STATUS_NOT_COMPLETED)),
+            last_completed_week=Max('progress_rows__week_no', filter=Q(progress_rows__status=TeacherCourseProgress.STATUS_COMPLETED)),
         )
         assignment_rows = []
         for assignment in assignments:
             total = assignment.total_weeks or 0
             completed = assignment.completed_weeks or 0
+            pending = assignment.pending_weeks or 0
             assignment_rows.append({
                 'assignment': assignment,
                 'total': total,
                 'completed': completed,
-                'not_completed': max(total - completed, 0),
+                'not_completed': pending,
                 'progress': _progress_percent(completed, total),
+                'last_completed_week': assignment.last_completed_week,
             })
+        assignment_rows.sort(key=lambda row: (-row['not_completed'], row['assignment'].classroom.name, row['assignment'].subject.name))
+        pending_qs = TeacherCourseProgress.objects.filter(
+            assignment__teacher=request.user,
+            status=TeacherCourseProgress.STATUS_NOT_COMPLETED,
+        )
+        completed_qs = TeacherCourseProgress.objects.filter(
+            assignment__teacher=request.user,
+            status=TeacherCourseProgress.STATUS_COMPLETED,
+        )
         context = {
             'assignment_rows': assignment_rows,
-            'pending_rows': TeacherCourseProgress.objects.filter(assignment__teacher=request.user, status=TeacherCourseProgress.STATUS_NOT_COMPLETED).count(),
-            'completed_rows': TeacherCourseProgress.objects.filter(assignment__teacher=request.user, status=TeacherCourseProgress.STATUS_COMPLETED).count(),
+            'pending_rows': pending_qs.count(),
+            'completed_rows': completed_qs.count(),
+            'quick_pending_rows': _teacher_pending_progress_rows(pending_qs.select_related(
+                'assignment__class_subject__classroom',
+                'assignment__class_subject__subject',
+            )[:6]),
         }
         return render(request, 'checker/teacher_dashboard.html', context)
 
@@ -364,23 +373,65 @@ def dashboard(request):
         'recent_records': CopyCheckRecord.objects.filter(entered_by=request.user).select_related(
             'student', 'class_subject__subject', 'chapter'
         )[:10],
-        'attention_class_subjects': _attention_class_subject_rows(5),
-        'attention_students': _attention_student_rows(5),
+        'attention_class_subjects': _attention_class_subject_rows(3),
+        'attention_students': _attention_student_rows(3),
     }
     return render(request, 'checker/checker_dashboard.html', context)
 
 
 @login_required
 def attention_list(request):
-    limit = 100 if is_app_admin(request.user) else 50
+    is_admin = is_app_admin(request.user)
+    show = request.GET.get('show')
+    if is_admin:
+        limit = 100 if show == 'more' else 10
+        more_limit = 100
+    else:
+        limit = 10 if show == 'more' else 3
+        more_limit = 10
     context = {
         'limit': limit,
-        'is_admin_view': is_app_admin(request.user),
+        'more_limit': more_limit,
+        'show_more': show == 'more',
+        'is_admin_view': is_admin,
         'class_subject_rows': _attention_class_subject_rows(limit),
         'student_rows': _attention_student_rows(limit),
     }
     return render(request, 'checker/attention_list.html', context)
 
+
+@app_admin_required
+def admin_checking_side(request):
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    context = {
+        'today_locked': CopyCheckRecord.objects.filter(locked=True, locked_at__date=today).count(),
+        'month_locked': CopyCheckRecord.objects.filter(locked=True, locked_at__date__gte=month_start).count(),
+        'total_locked': CopyCheckRecord.objects.filter(locked=True).count(),
+        'pending_requests': CorrectionRequest.objects.filter(status=CorrectionRequest.STATUS_PENDING).count(),
+        'attention_class_subjects': _attention_class_subject_rows(3),
+        'attention_students': _attention_student_rows(3),
+        'recent_records': CopyCheckRecord.objects.select_related(
+            'student', 'classroom', 'class_subject__subject', 'chapter', 'entered_by'
+        )[:10],
+    }
+    return render(request, 'checker/admin_checking_side.html', context)
+
+
+@app_admin_required
+def admin_teaching_side(request):
+    context = {
+        'teacher_assignments_count': TeacherCourseAssignment.objects.filter(is_active=True).count(),
+        'teacher_pending_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_NOT_COMPLETED).count(),
+        'teacher_completed_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_COMPLETED).count(),
+        'next_week_no': (TeacherCourseProgress.objects.aggregate(max_week=Max('week_no'))['max_week'] or 0) + 1,
+        'recent_teacher_progress': TeacherCourseProgress.objects.select_related(
+            'assignment__teacher__checker_profile',
+            'assignment__class_subject__classroom',
+            'assignment__class_subject__subject',
+        ).order_by('-updated_at')[:10],
+    }
+    return render(request, 'checker/admin_teaching_side.html', context)
 
 
 @checker_required
@@ -866,10 +917,89 @@ def review_correction_request(request, request_id):
     return render(request, 'checker/review_correction_request.html', {'correction': correction, 'record': record, 'form': form})
 
 
+
+
+def _force_delete_user(user):
+    """Delete a user and related app-owned records. The currently logged-in admin is protected in the view."""
+    CorrectionRequest.objects.filter(reviewed_by=user).update(reviewed_by=None)
+    TeacherProgressCorrectionRequest.objects.filter(reviewed_by=user).update(reviewed_by=None)
+    TeacherProgressCorrectionRequest.objects.filter(requested_by=user).delete()
+    CorrectionRequest.objects.filter(requested_by=user).delete()
+    # Delete teacher module data owned by this user.
+    assignments = TeacherCourseAssignment.objects.filter(teacher=user)
+    TeacherCourseProgress.objects.filter(assignment__in=assignments).delete()
+    assignments.delete()
+    # Delete copy-checking records tied to this user if admin chooses to delete the account.
+    CopyCheckRecord.objects.filter(Q(entered_by=user) | Q(actual_checker_user=user)).delete()
+    DailyBackup.objects.filter(triggered_by=user).update(triggered_by=None)
+    profile = getattr(user, 'checker_profile', None)
+    if profile:
+        profile.delete()
+    username = user.username
+    user.delete()
+    return username
+
+
+def _delete_students(student_ids):
+    students = Student.objects.filter(id__in=student_ids)
+    CopyCheckRecord.objects.filter(student__in=students).delete()
+    count = students.count()
+    students.delete()
+    return count
+
+
+def _delete_classrooms(class_ids):
+    classrooms = ClassRoom.objects.filter(id__in=class_ids)
+    count = classrooms.count()
+    class_subjects = ClassSubject.objects.filter(classroom__in=classrooms)
+    assignments = TeacherCourseAssignment.objects.filter(class_subject__in=class_subjects)
+    TeacherCourseProgress.objects.filter(assignment__in=assignments).delete()
+    assignments.delete()
+    CopyCheckRecord.objects.filter(Q(classroom__in=classrooms) | Q(student__classroom__in=classrooms) | Q(class_subject__in=class_subjects)).delete()
+    Student.objects.filter(classroom__in=classrooms).delete()
+    ClassSubjectChapter.objects.filter(class_subject__in=class_subjects).delete()
+    class_subjects.delete()
+    classrooms.delete()
+    return count
+
+
+def _delete_subjects(subject_ids):
+    subjects = Subject.objects.filter(id__in=subject_ids)
+    count = subjects.count()
+    class_subjects = ClassSubject.objects.filter(subject__in=subjects)
+    assignments = TeacherCourseAssignment.objects.filter(class_subject__in=class_subjects)
+    TeacherCourseProgress.objects.filter(assignment__in=assignments).delete()
+    assignments.delete()
+    CopyCheckRecord.objects.filter(class_subject__in=class_subjects).delete()
+    ClassSubjectChapter.objects.filter(class_subject__in=class_subjects).delete()
+    class_subjects.delete()
+    subjects.delete()
+    return count
+
+
+def _delete_weeks(progress_ids):
+    rows = TeacherCourseProgress.objects.filter(id__in=progress_ids)
+    count = rows.count()
+    rows.delete()
+    return count
+
+
+def _delete_teachers(user_ids, current_user):
+    teachers = User.objects.filter(id__in=user_ids, checker_profile__role=UserProfile.ROLE_TEACHER).exclude(id=current_user.id)
+    count = teachers.count()
+    for teacher in list(teachers):
+        _force_delete_user(teacher)
+    return count
+
 @app_admin_required
 def admin_users(request):
-    users = User.objects.select_related('checker_profile').order_by('username')
-    return render(request, 'checker/admin_users.html', {'users': users})
+    users = User.objects.select_related('checker_profile').order_by('checker_profile__role', 'username')
+    admin_checker_users = users.filter(Q(checker_profile__role=UserProfile.ROLE_ADMIN) | Q(checker_profile__role=UserProfile.ROLE_CHECKER) | Q(checker_profile__isnull=True))
+    teacher_users = users.filter(checker_profile__role=UserProfile.ROLE_TEACHER)
+    return render(request, 'checker/admin_users.html', {
+        'admin_checker_users': admin_checker_users,
+        'teacher_users': teacher_users,
+    })
 
 
 @app_admin_required
@@ -926,31 +1056,14 @@ def admin_user_delete(request, user_id):
         messages.error(request, 'You cannot delete the account you are currently using.')
         return redirect('admin_users')
 
-    active_admin_count = UserProfile.objects.filter(
-        role=UserProfile.ROLE_ADMIN,
-        is_active_checker=True,
-        user__is_active=True,
-    ).count()
-    if profile and profile.role == UserProfile.ROLE_ADMIN and active_admin_count <= 1:
-        messages.error(request, 'You cannot delete the last active admin account.')
-        return redirect('admin_users')
-
     if request.method == 'POST':
         form = UserDeleteConfirmForm(request.POST)
         if form.is_valid():
-            username = user.username
-            display_name = profile.display_name if profile else username
-            try:
-                with transaction.atomic():
-                    user.delete()
-            except ProtectedError:
-                messages.error(
-                    request,
-                    'This user already has checking, correction, teacher, or backup records. For data safety, it cannot be deleted. Open Edit and make the user inactive instead.'
-                )
-                return redirect('admin_users')
-            log_action(request.user, 'DELETE_USER', None, f'Deleted user {username} ({display_name})')
-            ensure_daily_backup(reason='Admin deleted a user', user=request.user)
+            display = profile.display_name if profile else user.username
+            ensure_daily_backup(reason='Backup before deleting user', user=request.user)
+            with transaction.atomic():
+                username = _force_delete_user(user)
+            log_action(request.user, 'DELETE_USER', None, f'Force deleted user {username} ({display})')
             messages.success(request, f'User {username} was deleted.')
             return redirect('admin_users')
     else:
@@ -1035,70 +1148,31 @@ def teacher_course_detail(request, assignment_id):
         teacher=request.user,
         is_active=True,
     )
-    if request.method == 'POST':
-        form = TeacherProgressForm(request.POST)
-        if form.is_valid():
-            with transaction.atomic():
-                last_week = TeacherCourseProgress.objects.select_for_update().filter(assignment=assignment).aggregate(max_week=Max('week_no'))['max_week'] or 0
-                progress = form.save(commit=False)
-                progress.assignment = assignment
-                progress.week_no = last_week + 1
-                progress.status = TeacherCourseProgress.STATUS_NOT_COMPLETED
-                progress.locked = False
-                progress.save()
-                log_action(request.user, 'ADD_TEACHER_PROGRESS', progress, f'Added week {progress.week_no} for {assignment}')
-            ensure_daily_backup(reason='Teacher added course progress', user=request.user)
-            messages.success(request, f'Week {progress.week_no} added.')
-            return redirect('teacher_course_detail', assignment_id=assignment.id)
-    else:
-        form = TeacherProgressForm()
-
-    rows = assignment.progress_rows.all()
+    pending_rows = _teacher_pending_progress_rows(
+        assignment.progress_rows.filter(status=TeacherCourseProgress.STATUS_NOT_COMPLETED)
+    )
+    completed_rows = assignment.progress_rows.filter(status=TeacherCourseProgress.STATUS_COMPLETED).order_by('-week_no')
     return render(request, 'checker/teacher_course_detail.html', {
         'assignment': assignment,
-        'rows': rows,
-        'form': form,
+        'pending_rows': pending_rows,
+        'completed_rows': completed_rows,
         'summary': _assignment_summary(assignment),
     })
 
 
 @teacher_required
 def teacher_progress_edit(request, progress_id):
-    progress = get_object_or_404(
-        TeacherCourseProgress.objects.select_related('assignment__class_subject__classroom', 'assignment__class_subject__subject'),
-        pk=progress_id,
-        assignment__teacher=request.user,
-    )
-    if not progress.can_edit:
-        messages.error(request, 'Completed rows are locked and cannot be edited. Ask admin if a correction is needed.')
-        return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
-    if request.method == 'POST':
-        form = TeacherProgressForm(request.POST, instance=progress)
-        if form.is_valid():
-            form.save()
-            log_action(request.user, 'EDIT_TEACHER_PROGRESS', progress, f'Edited week {progress.week_no}')
-            ensure_daily_backup(reason='Teacher edited course progress', user=request.user)
-            messages.success(request, 'Week detail updated.')
-            return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
-    else:
-        form = TeacherProgressForm(instance=progress)
-    return render(request, 'checker/teacher_progress_edit.html', {'form': form, 'progress': progress})
+    progress = get_object_or_404(TeacherCourseProgress, pk=progress_id, assignment__teacher=request.user)
+    messages.error(request, 'Teachers cannot edit week rows directly. Enter detail when marking a pending week completed.')
+    return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
 
 
 @teacher_required
 @require_POST
 def teacher_progress_delete(request, progress_id):
     progress = get_object_or_404(TeacherCourseProgress, pk=progress_id, assignment__teacher=request.user)
-    assignment_id = progress.assignment_id
-    if not progress.can_edit:
-        messages.error(request, 'Completed rows are locked and cannot be deleted.')
-        return redirect('teacher_course_detail', assignment_id=assignment_id)
-    label = f'Week {progress.week_no}'
-    log_action(request.user, 'DELETE_TEACHER_PROGRESS', progress, f'Deleted {label}')
-    progress.delete()
-    ensure_daily_backup(reason='Teacher deleted unlocked progress row', user=request.user)
-    messages.success(request, f'{label} deleted.')
-    return redirect('teacher_course_detail', assignment_id=assignment_id)
+    messages.error(request, 'Teachers cannot delete week rows. Ask admin if a row was issued by mistake.')
+    return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
 
 
 @teacher_required
@@ -1107,13 +1181,98 @@ def teacher_progress_complete(request, progress_id):
     progress = get_object_or_404(TeacherCourseProgress, pk=progress_id, assignment__teacher=request.user)
     if not progress.can_edit:
         messages.info(request, 'This row is already completed/locked.')
+        next_url = request.POST.get('next')
+        if next_url:
+            return redirect(next_url)
         return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
+    form = TeacherCompleteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Please enter detail before marking this week as completed.')
+        return redirect(request.POST.get('next') or reverse('teacher_course_detail', kwargs={'assignment_id': progress.assignment_id}))
+    progress.detail = form.cleaned_data['detail'].strip()
     progress.status = TeacherCourseProgress.STATUS_COMPLETED
-    progress.save(update_fields=['status', 'locked', 'completed_at', 'updated_at'])
+    progress.save(update_fields=['detail', 'status', 'locked', 'completed_at', 'updated_at'])
     log_action(request.user, 'COMPLETE_TEACHER_PROGRESS', progress, f'Completed week {progress.week_no}')
     ensure_daily_backup(reason='Teacher completed a progress row', user=request.user)
     messages.success(request, f'Week {progress.week_no} marked completed and locked.')
+    next_url = request.POST.get('next')
+    if next_url:
+        return redirect(next_url)
     return redirect('teacher_course_detail', assignment_id=progress.assignment_id)
+
+
+@teacher_required
+def teacher_quick_update(request):
+    pending_rows = TeacherCourseProgress.objects.filter(
+        assignment__teacher=request.user,
+        status=TeacherCourseProgress.STATUS_NOT_COMPLETED,
+        assignment__is_active=True,
+    ).select_related('assignment__class_subject__classroom', 'assignment__class_subject__subject')
+    return render(request, 'checker/teacher_quick_update.html', {
+        'pending_rows': _teacher_pending_progress_rows(pending_rows),
+    })
+
+
+
+@app_admin_required
+def issue_week_admin(request):
+    next_week_no = (TeacherCourseProgress.objects.aggregate(max_week=Max('week_no'))['max_week'] or 0) + 1
+    preview_assignments = None
+    created_count = None
+    skipped_count = None
+
+    if request.method == 'POST':
+        form = IssueWeekForm(request.POST)
+        if form.is_valid():
+            assignments = TeacherCourseAssignment.objects.filter(
+                is_active=True,
+                class_subject__is_active=True,
+                class_subject__classroom__is_active=True,
+                class_subject__subject__is_active=True,
+            ).select_related('teacher__checker_profile', 'class_subject__classroom', 'class_subject__subject')
+            scope = form.cleaned_data['scope']
+            if scope == IssueWeekForm.SCOPE_TEACHER:
+                assignments = assignments.filter(teacher=form.cleaned_data['teacher'])
+            elif scope == IssueWeekForm.SCOPE_CLASS:
+                assignments = assignments.filter(class_subject__classroom=form.cleaned_data['classroom'])
+            elif scope == IssueWeekForm.SCOPE_COURSE:
+                assignments = assignments.filter(class_subject=form.cleaned_data['class_subject'])
+
+            if 'preview' in request.POST:
+                preview_assignments = list(assignments)
+                messages.info(request, f'Preview ready for Week {next_week_no}. {len(preview_assignments)} active assignment(s) match this scope.')
+            elif request.POST.get('confirm') == 'yes':
+                with transaction.atomic():
+                    created_count = 0
+                    skipped_count = 0
+                    for assignment in assignments.select_for_update():
+                        obj, created = TeacherCourseProgress.objects.get_or_create(
+                            assignment=assignment,
+                            week_no=next_week_no,
+                            defaults={
+                                'detail': '',
+                                'status': TeacherCourseProgress.STATUS_NOT_COMPLETED,
+                                'locked': False,
+                            },
+                        )
+                        if created:
+                            created_count += 1
+                            log_action(request.user, 'ISSUE_TEACHER_WEEK', obj, f'Issued week {next_week_no} for {assignment}')
+                        else:
+                            skipped_count += 1
+                ensure_daily_backup(reason=f'Admin issued Week {next_week_no}', user=request.user)
+                messages.success(request, f'Week {next_week_no} issued. Created: {created_count}. Skipped existing: {skipped_count}.')
+                return redirect('issue_week_admin')
+    else:
+        form = IssueWeekForm(initial={'scope': IssueWeekForm.SCOPE_ALL})
+
+    return render(request, 'checker/issue_week_admin.html', {
+        'form': form,
+        'next_week_no': next_week_no,
+        'preview_assignments': preview_assignments,
+        'created_count': created_count,
+        'skipped_count': skipped_count,
+    })
 
 
 @app_admin_required
@@ -1242,3 +1401,137 @@ def teacher_progress_row_edit_admin(request, progress_id):
     })
 
 
+
+
+@app_admin_required
+def teacher_progress_export(request):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Teacher Progress'
+    ws.append(['Teacher', 'Class', 'Subject', 'Week No', 'Detail', 'Status', 'Created', 'Completed'])
+    rows = TeacherCourseProgress.objects.select_related(
+        'assignment__teacher__checker_profile',
+        'assignment__class_subject__classroom',
+        'assignment__class_subject__subject',
+    ).order_by(
+        'assignment__teacher__checker_profile__display_name',
+        'assignment__class_subject__classroom__name',
+        'assignment__class_subject__classroom__section',
+        'assignment__class_subject__subject__name',
+        'week_no'
+    )
+    for row in rows:
+        ws.append([
+            _display_user(row.assignment.teacher),
+            str(row.assignment.classroom),
+            row.assignment.subject.name,
+            row.week_no,
+            row.detail,
+            row.get_status_display(),
+            timezone.localtime(row.created_at).strftime('%Y-%m-%d %H:%M') if row.created_at else '',
+            timezone.localtime(row.completed_at).strftime('%Y-%m-%d %H:%M') if row.completed_at else '',
+        ])
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="teacher_progress.xlsx"'
+    wb.save(response)
+    return response
+
+
+def _delete_data_items(category, ids, current_user):
+    if category == 'teachers':
+        return _delete_teachers(ids, current_user)
+    if category == 'weeks':
+        return _delete_weeks(ids)
+    if category == 'subjects':
+        return _delete_subjects(ids)
+    if category == 'classes':
+        return _delete_classrooms(ids)
+    if category == 'students':
+        return _delete_students(ids)
+    return 0
+
+
+def _delete_data_queryset(category):
+    if category == 'teachers':
+        return User.objects.filter(checker_profile__role=UserProfile.ROLE_TEACHER).select_related('checker_profile').order_by('checker_profile__display_name', 'username')
+    if category == 'weeks':
+        return TeacherCourseProgress.objects.select_related(
+            'assignment__teacher__checker_profile',
+            'assignment__class_subject__classroom',
+            'assignment__class_subject__subject',
+        ).order_by('-week_no', 'assignment__class_subject__classroom__name', 'assignment__class_subject__subject__name')
+    if category == 'subjects':
+        return Subject.objects.all().order_by('name')
+    if category == 'classes':
+        return ClassRoom.objects.all().order_by('name', 'section')
+    if category == 'students':
+        return Student.objects.select_related('classroom').order_by('classroom__name', 'classroom__section', 'roll_no', 'full_name')
+    return []
+
+
+def _delete_data_label(category, obj):
+    if category == 'teachers':
+        return f'{_display_user(obj)} ({obj.username})'
+    if category == 'weeks':
+        return f'Week {obj.week_no} — {obj.assignment.classroom} — {obj.assignment.subject.name} — {_display_user(obj.assignment.teacher)}'
+    if category == 'subjects':
+        return obj.name
+    if category == 'classes':
+        return str(obj)
+    if category == 'students':
+        return f'{obj.classroom} — Roll {obj.roll_no} — {obj.full_name}'
+    return str(obj)
+
+
+@app_admin_required
+def delete_data_admin(request):
+    category_choices = [
+        ('teachers', 'Teachers'),
+        ('weeks', 'Teacher week rows'),
+        ('subjects', 'Subjects'),
+        ('classes', 'Classes'),
+        ('students', 'Students'),
+    ]
+    category = request.GET.get('category') or request.POST.get('category') or 'teachers'
+    valid_categories = {key for key, _label in category_choices}
+    if category not in valid_categories:
+        category = 'teachers'
+
+    items = list(_delete_data_queryset(category))
+    item_rows = [{'id': item.id, 'label': _delete_data_label(category, item), 'object': item} for item in items]
+
+    if request.method == 'POST':
+        mode = request.POST.get('mode') or 'selected'
+        selected_ids = [int(item_id) for item_id in request.POST.getlist('selected_ids') if item_id.isdigit()]
+        if mode == 'all':
+            selected_ids = [row['id'] for row in item_rows]
+        if category == 'teachers':
+            selected_ids = [item_id for item_id in selected_ids if item_id != request.user.id]
+        selected_labels = [row['label'] for row in item_rows if row['id'] in selected_ids]
+        if not selected_ids:
+            messages.error(request, 'Select at least one item to delete.')
+            return redirect(f'{reverse("delete_data_admin")}?category={category}')
+        if request.POST.get('confirm_text') != 'DELETE':
+            return render(request, 'checker/delete_data_confirm.html', {
+                'category': category,
+                'category_choices': category_choices,
+                'selected_ids': selected_ids,
+                'selected_labels': selected_labels,
+                'mode': mode,
+            })
+        ensure_daily_backup(reason=f'Backup before deleting {category}', user=request.user)
+        try:
+            with transaction.atomic():
+                count = _delete_data_items(category, selected_ids, request.user)
+        except (ProtectedError, IntegrityError) as exc:
+            messages.error(request, f'Deletion was blocked because related records could not be removed safely: {exc}')
+            return redirect(f'{reverse("delete_data_admin")}?category={category}')
+        log_action(request.user, 'DELETE_DATA', None, f'Deleted {count} item(s) from {category}')
+        messages.success(request, f'Deleted {count} item(s) from {dict(category_choices).get(category, category)}.')
+        return redirect(f'{reverse("delete_data_admin")}?category={category}')
+
+    return render(request, 'checker/delete_data_admin.html', {
+        'category': category,
+        'category_choices': category_choices,
+        'item_rows': item_rows,
+    })

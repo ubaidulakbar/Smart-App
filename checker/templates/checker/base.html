@@ -17,25 +17,15 @@
           <a class="nav-link" href="{% url 'attention_list' %}">Attention List</a>
         {% endif %}
         {% if is_teacher %}
-          <a class="nav-link primary-nav" href="{% url 'dashboard' %}">My Courses</a>
+          <a class="nav-link primary-nav" href="{% url 'teacher_quick_update' %}">Quick Update</a>
+          <a class="nav-link" href="{% url 'dashboard' %}">My Courses</a>
         {% endif %}
         {% if is_app_admin %}
-          <details class="nav-dropdown">
-            <summary>Admin Menu</summary>
-            <div class="dropdown-panel">
-              <a href="{% url 'class_list_admin' %}">Classes</a>
-              <a href="{% url 'student_list_admin' %}">Students</a>
-              <a href="{% url 'student_import' %}">Import Students</a>
-              <a href="{% url 'attention_list' %}">Attention List</a>
-              <a href="{% url 'admin_records' %}">Latest Records</a>
-              <a class="{% if pending_copy_requests_count %}attention-link{% endif %}" href="{% url 'correction_requests_admin' %}">{% if pending_copy_requests_count %}★ {% endif %}Copy Correction Requests{% if pending_copy_requests_count %} ({{ pending_copy_requests_count }}){% endif %}</a>
-              <a href="{% url 'teacher_assignments_admin' %}">Teacher Assignments</a>
-              <a href="{% url 'teacher_progress_classes_admin' %}">Teacher Progress by Class</a>
-              <a href="{% url 'teacher_progress_teachers_admin' %}">Teacher Progress by Teacher</a>
-              <a href="{% url 'admin_users' %}">Users</a>
-              <a href="{% url 'backups_admin' %}">Backups</a>
-            </div>
-          </details>
+          <a class="nav-link" href="{% url 'admin_checking_side' %}">Checking Side</a>
+          <a class="nav-link" href="{% url 'admin_teaching_side' %}">Teaching Side</a>
+          <a class="nav-link" href="{% url 'admin_users' %}">Users</a>
+          <a class="nav-link" href="{% url 'backups_admin' %}">Backups</a>
+          <a class="nav-link danger-nav" href="{% url 'delete_data_admin' %}">Delete Data</a>
         {% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline-form">
           {% csrf_token %}

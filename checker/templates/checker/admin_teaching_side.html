@@ -1,0 +1,48 @@
+{% extends 'checker/base.html' %}
+{% block title %}Teaching Side{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Teaching Side</h1>
+    <p class="muted">Teacher assignments, weekly progress, and exports.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to Admin Dashboard</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Active Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
+  <div class="stat-card"><span>Pending Weeks</span><strong>{{ teacher_pending_count }}</strong></div>
+  <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>
+  <div class="stat-card"><span>Next Week No</span><strong>{{ next_week_no }}</strong></div>
+</div>
+
+<div class="admin-action-grid">
+  <a class="admin-action" href="{% url 'teacher_assignments_admin' %}"><strong>Teacher Assignments</strong><span>Assign one teacher to each class-subject.</span></a>
+  <a class="admin-action primary-action" href="{% url 'issue_week_admin' %}"><strong>Issue New Week</strong><span>Create Week {{ next_week_no }} rows for teachers.</span></a>
+  <a class="admin-action" href="{% url 'teacher_progress_classes_admin' %}"><strong>Progress by Class</strong><span>Open class-wise progress.</span></a>
+  <a class="admin-action" href="{% url 'teacher_progress_teachers_admin' %}"><strong>Progress by Teacher</strong><span>Open teacher-wise progress.</span></a>
+  <a class="admin-action" href="{% url 'teacher_progress_export' %}"><strong>Export Excel</strong><span>Download all teacher progress.</span></a>
+  <a class="admin-action danger-zone" href="{% url 'delete_data_admin' %}?category=weeks"><strong>Delete Weeks</strong><span>Delete one, multiple, or all week rows.</span></a>
+</div>
+
+<section class="card">
+  <h2>Recent Teacher Progress</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Teacher</th><th>Class</th><th>Subject</th><th>Week</th><th>Status</th><th>Updated</th></tr></thead>
+      <tbody>
+        {% for row in recent_teacher_progress %}
+          <tr>
+            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }}</td>
+            <td>{{ row.assignment.classroom }}</td>
+            <td>{{ row.assignment.subject.name }}</td>
+            <td>{{ row.week_no }}</td>
+            <td>{{ row.get_status_display }}</td>
+            <td>{{ row.updated_at|date:'d M Y, h:i A' }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="6">No teacher progress yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

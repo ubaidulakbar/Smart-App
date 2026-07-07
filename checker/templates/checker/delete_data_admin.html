@@ -1,0 +1,49 @@
+{% extends 'checker/base.html' %}
+{% block title %}Delete Data{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Delete Data</h1>
+    <p class="muted">Admin can delete selected data. Your current logged-in account cannot be deleted.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to Dashboard</a>
+</div>
+
+<section class="card danger-zone">
+  <h2>Choose data type</h2>
+  <div class="button-row">
+    {% for key,label in category_choices %}
+      <a class="button {% if category == key %}primary{% endif %}" href="{% url 'delete_data_admin' %}?category={{ key }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card">
+  <form method="post" class="form-stack">
+    {% csrf_token %}
+    <input type="hidden" name="category" value="{{ category }}">
+    <div class="section-head">
+      <div>
+        <h2>{{ category|title }}</h2>
+        <p class="muted small">Select items or choose delete all. A backup is created before deletion.</p>
+      </div>
+      <label class="inline-choice"><input type="radio" name="mode" value="selected" checked> Selected only</label>
+      <label class="inline-choice"><input type="radio" name="mode" value="all"> All in this category</label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Select</th><th>Item</th></tr></thead>
+        <tbody>
+          {% for row in item_rows %}
+            <tr>
+              <td><input type="checkbox" name="selected_ids" value="{{ row.id }}"></td>
+              <td>{{ row.label }}</td>
+            </tr>
+          {% empty %}<tr><td colspan="2">No items found.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button class="danger big-action" type="submit">Continue to Confirmation</button>
+  </form>
+</section>
+{% endblock %}

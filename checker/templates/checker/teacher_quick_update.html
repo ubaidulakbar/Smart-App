@@ -1,0 +1,32 @@
+{% extends 'checker/base.html' %}
+{% block title %}Quick Update{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Quick Update</h1>
+    <p class="muted">All pending week rows from your assigned courses. Enter detail before marking completed.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to Dashboard</a>
+</div>
+
+<section class="card">
+  <div class="pending-week-list">
+    {% for row in pending_rows %}
+      <form method="post" action="{% url 'teacher_progress_complete' row.id %}" class="pending-week-card {% if row.needs_attention %}needs-attention{% endif %}" onsubmit="return confirm('Once completed, this week will be locked. Continue?');">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'teacher_quick_update' %}">
+        <div>
+          <strong>{{ row.assignment.classroom }} — {{ row.assignment.subject.name }} — Week {{ row.week_no }}</strong>
+          <p class="muted small">Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</p>
+        </div>
+        <label>Week detail
+          <textarea name="detail" rows="3" required placeholder="Write what was completed this week...">{{ row.detail }}</textarea>
+        </label>
+        <button class="primary" type="submit">Mark Completed</button>
+      </form>
+    {% empty %}
+      <p class="muted">No pending week rows. You are up to date.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

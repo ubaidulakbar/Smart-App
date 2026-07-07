@@ -197,6 +197,58 @@ class TeacherProgressForm(forms.ModelForm):
         widgets = {'detail': forms.Textarea(attrs={'rows': 3})}
 
 
+class TeacherCompleteForm(forms.Form):
+    detail = forms.CharField(
+        label='Week detail',
+        widget=forms.Textarea(attrs={'rows': 3}),
+        required=True,
+        error_messages={'required': 'Please enter detail before marking this week as completed.'},
+    )
+
+
+class IssueWeekForm(forms.Form):
+    SCOPE_ALL = 'all'
+    SCOPE_TEACHER = 'teacher'
+    SCOPE_CLASS = 'class'
+    SCOPE_COURSE = 'course'
+    SCOPE_CHOICES = [
+        (SCOPE_ALL, 'All active teacher-course assignments'),
+        (SCOPE_TEACHER, 'Selected teacher'),
+        (SCOPE_CLASS, 'Selected class'),
+        (SCOPE_COURSE, 'Selected class-subject/course'),
+    ]
+
+    scope = forms.ChoiceField(choices=SCOPE_CHOICES, initial=SCOPE_ALL)
+    teacher = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
+    classroom = forms.ModelChoiceField(queryset=ClassRoom.objects.none(), required=False, label='Class / Section')
+    class_subject = forms.ModelChoiceField(queryset=ClassSubject.objects.none(), required=False, label='Class / Subject')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['teacher'].queryset = User.objects.filter(
+            is_active=True,
+            checker_profile__role=UserProfile.ROLE_TEACHER,
+            checker_profile__is_active_checker=True,
+        ).select_related('checker_profile').order_by('checker_profile__display_name', 'username')
+        self.fields['classroom'].queryset = ClassRoom.objects.filter(is_active=True).order_by('name', 'section')
+        self.fields['class_subject'].queryset = ClassSubject.objects.filter(
+            is_active=True,
+            classroom__is_active=True,
+            subject__is_active=True,
+        ).select_related('classroom', 'subject').order_by('classroom__name', 'classroom__section', 'subject__name')
+
+    def clean(self):
+        cleaned = super().clean()
+        scope = cleaned.get('scope')
+        if scope == self.SCOPE_TEACHER and not cleaned.get('teacher'):
+            self.add_error('teacher', 'Select a teacher for this scope.')
+        if scope == self.SCOPE_CLASS and not cleaned.get('classroom'):
+            self.add_error('classroom', 'Select a class for this scope.')
+        if scope == self.SCOPE_COURSE and not cleaned.get('class_subject'):
+            self.add_error('class_subject', 'Select a class-subject for this scope.')
+        return cleaned
+
+
 class TeacherProgressCorrectionRequestForm(forms.ModelForm):
     class Meta:
         model = TeacherProgressCorrectionRequest

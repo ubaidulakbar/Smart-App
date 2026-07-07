@@ -12,6 +12,7 @@
   <div class="stat-card"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
   <div class="stat-card"><span>Not Completed</span><strong>{{ summary.not_completed }}</strong></div>
   <div class="stat-card"><span>Progress</span><strong>{{ summary.progress }}%</strong></div>
+  <div class="button-row"><a class="button" href="{% url 'teacher_progress_export' %}">Export Excel</a><a class="button" href="{% url 'admin_teaching_side' %}">Teaching Side</a></div>
 </div>
 <section class="card">
   <h2>Week Details</h2>

@@ -1,0 +1,54 @@
+{% extends 'checker/base.html' %}
+{% block title %}Checking Side{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Checking Side</h1>
+    <p class="muted">Copy checking setup, records, attention list, and correction requests.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to Admin Dashboard</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Today</span><strong>{{ today_locked }}</strong></div>
+  <div class="stat-card"><span>This Month</span><strong>{{ month_locked }}</strong></div>
+  <div class="stat-card"><span>Overall</span><strong>{{ total_locked }}</strong></div>
+  <div class="stat-card {% if pending_requests %}stat-alert{% endif %}"><span>{% if pending_requests %}★ {% endif %}Copy Requests</span><strong>{{ pending_requests }}</strong></div>
+</div>
+
+<div class="admin-action-grid">
+  <a class="admin-action" href="{% url 'class_setup_add' %}"><strong>Add Class</strong><span>Class + subjects + chapter counts.</span></a>
+  <a class="admin-action" href="{% url 'class_list_admin' %}"><strong>Classes</strong><span>View and edit class setups.</span></a>
+  <a class="admin-action" href="{% url 'student_create' %}"><strong>Add Student</strong><span>Single student entry.</span></a>
+  <a class="admin-action" href="{% url 'student_list_admin' %}"><strong>Students</strong><span>View student list and profiles.</span></a>
+  <a class="admin-action" href="{% url 'student_import' %}"><strong>Import Students</strong><span>Excel preview before import.</span></a>
+  <a class="admin-action" href="{% url 'attention_list' %}"><strong>Attention List</strong><span>Top neglected class-subjects and students.</span></a>
+  <a class="admin-action" href="{% url 'admin_records' %}"><strong>Latest Records</strong><span>Latest 50 locked checking records.</span></a>
+  <a class="admin-action {% if pending_requests %}alert-action{% endif %}" href="{% url 'correction_requests_admin' %}"><strong>{% if pending_requests %}★ {% endif %}Correction Requests{% if pending_requests %} ({{ pending_requests }}){% endif %}</strong><span>Approve requested checking values.</span></a>
+</div>
+
+<section class="card">
+  <div class="section-head">
+    <div><h2>Attention Preview</h2><p class="muted small">Top 3 items only. Open full Attention List for more.</p></div>
+    <a class="button" href="{% url 'attention_list' %}">Open Attention List</a>
+  </div>
+  <div class="two-col">
+    <div>
+      <h3 class="mini-heading">Class / Subject Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_class_subjects %}
+          <div class="mini-item"><strong>{{ row.classroom }} — {{ row.subject.name }}</strong><span>Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}% · Pending: {{ row.pending_records }}</span></div>
+        {% empty %}<p class="muted">No setup found.</p>{% endfor %}
+      </div>
+    </div>
+    <div>
+      <h3 class="mini-heading">Student Wise</h3>
+      <div class="mini-list">
+        {% for row in attention_students %}
+          <div class="mini-item"><strong>{{ row.student.full_name }}</strong><span>{{ row.classroom }} · Last: {{ row.last_checked_label }} · Progress: {{ row.progress }}%</span></div>
+        {% empty %}<p class="muted">No students found.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -4,9 +4,12 @@
 <div class="page-head">
   <div>
     <h1>Attention List</h1>
-    <p class="muted">Items that have not been checked recently appear first. Showing top {{ limit }}.</p>
+    <p class="muted">Showing top {{ limit }}. Items with no checking or oldest checking date appear first.</p>
   </div>
-  {% if is_checker %}<a class="button primary" href="{% url 'select_checking' %}">Start Checking</a>{% endif %}
+  <div class="button-row">
+    {% if not show_more %}<a class="button primary" href="{% url 'attention_list' %}?show=more">Show More: Top {{ more_limit }}</a>{% else %}<a class="button" href="{% url 'attention_list' %}">Show Less</a>{% endif %}
+    {% if is_checker %}<a class="button" href="{% url 'select_checking' %}">Start Checking</a>{% endif %}
+  </div>
 </div>
 
 <section class="card">
@@ -39,8 +42,6 @@
         </dl>
         {% if is_checker %}
           <a class="button primary" href="{% url 'select_checking' %}?classroom={{ row.classroom.id }}&class_subject={{ row.class_subject.id }}">Open</a>
-        {% else %}
-          <a class="button" href="{% url 'select_checking' %}?classroom={{ row.classroom.id }}&class_subject={{ row.class_subject.id }}">Open Selection</a>
         {% endif %}
       </article>
     {% empty %}
