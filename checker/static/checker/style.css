@@ -236,10 +236,12 @@ button.danger:hover, .button.danger:hover, .small-button.danger:hover { backgrou
 }
 
 .admin-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
+.three-side-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .admin-choice { min-height: 170px; border-radius: 22px; padding: 28px; color: var(--text); border: 1px solid var(--line); background: #fff; display: grid; align-content: center; gap: 10px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); }
 .admin-choice:hover { text-decoration: none; transform: translateY(-1px); border-color: #bfdbfe; }
 .admin-choice strong { font-size: 28px; }
 .admin-choice span { color: var(--muted); font-size: 15px; line-height: 1.45; }
+.admin-choice.setup { background: linear-gradient(135deg, #ffffff, #fff7ed); }
 .admin-choice.checking { background: linear-gradient(135deg, #ffffff, #eff6ff); }
 .admin-choice.teaching { background: linear-gradient(135deg, #ffffff, #ecfdf5); }
 .primary-action { border-color: #bfdbfe; background: #eff6ff; }
@@ -251,6 +253,10 @@ button.danger:hover, .button.danger:hover, .small-button.danger:hover { backgrou
 .inline-choice { display: inline-flex; gap: 8px; align-items: center; font-weight: 800; }
 .inline-choice input { width: auto; }
 .danger-list { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 12px 32px; background: #fff; }
+
+@media (max-width: 900px) {
+  .three-side-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 760px) {
   .admin-choice-grid { grid-template-columns: 1fr; }

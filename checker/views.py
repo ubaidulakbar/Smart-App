@@ -344,6 +344,19 @@ def attention_list(request):
 
 
 @app_admin_required
+def admin_setup_side(request):
+    context = {
+        'class_count': ClassRoom.objects.filter(is_active=True).count(),
+        'student_count': Student.objects.filter(is_active=True).count(),
+        'subject_count': Subject.objects.filter(is_active=True).count(),
+        'teacher_count': UserProfile.objects.filter(role=UserProfile.ROLE_TEACHER, user__is_active=True).count(),
+        'checker_count': UserProfile.objects.filter(role=UserProfile.ROLE_CHECKER, user__is_active=True).count(),
+        'backup_count': DailyBackup.objects.count(),
+    }
+    return render(request, 'checker/admin_setup_side.html', context)
+
+
+@app_admin_required
 def admin_checking_side(request):
     today = timezone.localdate()
     month_start = today.replace(day=1)

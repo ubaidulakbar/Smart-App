@@ -4,18 +4,22 @@
 <div class="page-head">
   <div>
     <h1>Admin Dashboard</h1>
-    <p class="muted">Choose the side you want to manage.</p>
+    <p class="muted">Choose one area to manage. Setup data is separated from checking and teaching reports.</p>
   </div>
 </div>
 
-<div class="admin-choice-grid">
+<div class="admin-choice-grid three-side-grid">
+  <a class="admin-choice setup" href="{% url 'admin_setup_side' %}">
+    <strong>School Setup</strong>
+    <span>Classes, subjects, students, users, teacher assignments, backups, and delete data.</span>
+  </a>
   <a class="admin-choice checking" href="{% url 'admin_checking_side' %}">
-    <strong>Checking Side</strong>
-    <span>Classes, students, copy records, attention list, and exports.</span>
+    <strong>Copy Checking</strong>
+    <span>Checking records, attention lists, student profiles, and Excel exports.</span>
   </a>
   <a class="admin-choice teaching" href="{% url 'admin_teaching_side' %}">
-    <strong>Teaching Side</strong>
-    <span>Teacher assignments, issue weeks, teacher progress, and Excel export.</span>
+    <strong>Teaching Progress</strong>
+    <span>Issue weeks, view teacher progress, and export teaching data.</span>
   </a>
 </div>
 
@@ -25,11 +29,5 @@
   <div class="stat-card"><span>Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
   <div class="stat-card"><span>Pending Weeks</span><strong>{{ teacher_pending_count }}</strong></div>
   <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>
-</div>
-
-<div class="admin-action-grid">
-  <a class="admin-action" href="{% url 'admin_users' %}"><strong>Users</strong><span>Add/reset/delete admin, checker, and teacher users.</span></a>
-  <a class="admin-action" href="{% url 'backups_admin' %}"><strong>Backups</strong><span>Create or download backup files.</span></a>
-  <a class="admin-action danger-zone" href="{% url 'delete_data_admin' %}"><strong>Delete Data</strong><span>Delete teachers, weeks, classes, subjects, or students.</span></a>
 </div>
 {% endblock %}

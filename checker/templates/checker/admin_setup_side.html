@@ -1,0 +1,29 @@
+{% extends 'checker/base.html' %}
+{% block title %}School Setup{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>School Setup</h1>
+    <p class="muted">Manage shared school data used by both copy checking and teaching progress.</p>
+  </div>
+  <a class="button" href="{% url 'dashboard' %}">Back to Admin Dashboard</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Classes</span><strong>{{ class_count }}</strong></div>
+  <div class="stat-card"><span>Students</span><strong>{{ student_count }}</strong></div>
+  <div class="stat-card"><span>Subjects</span><strong>{{ subject_count }}</strong></div>
+  <div class="stat-card"><span>Teachers</span><strong>{{ teacher_count }}</strong></div>
+  <div class="stat-card"><span>Checkers</span><strong>{{ checker_count }}</strong></div>
+</div>
+
+<div class="admin-action-grid">
+  <a class="admin-action" href="{% url 'class_list_admin' %}"><strong>Classes & Subjects</strong><span>Create/edit classes and assign subjects.</span></a>
+  <a class="admin-action" href="{% url 'student_list_admin' %}"><strong>Students</strong><span>View, add, and edit students.</span></a>
+  <a class="admin-action" href="{% url 'student_import' %}"><strong>Import Students</strong><span>Upload Excel student lists.</span></a>
+  <a class="admin-action" href="{% url 'admin_users' %}"><strong>Users</strong><span>Add/reset/delete admin, checker, and teacher accounts.</span></a>
+  <a class="admin-action" href="{% url 'teacher_assignments_admin' %}"><strong>Teacher Assignments</strong><span>Assign one teacher to each class-subject.</span></a>
+  <a class="admin-action" href="{% url 'backups_admin' %}"><strong>Backups</strong><span>Create, download, or upload backup files.</span></a>
+  <a class="admin-action danger-zone" href="{% url 'delete_data_admin' %}"><strong>Delete Data</strong><span>Delete selected school data when needed.</span></a>
+</div>
+{% endblock %}

@@ -1,10 +1,10 @@
 {% extends 'checker/base.html' %}
-{% block title %}Checking Side{% endblock %}
+{% block title %}Copy Checking{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Checking Side</h1>
-    <p class="muted">Copy-checking records, students, attention lists, and exports.</p>
+    <h1>Copy Checking</h1>
+    <p class="muted">Checking records, attention lists, student profiles, and exports.</p>
   </div>
   <a class="button" href="{% url 'dashboard' %}">Back to Admin Dashboard</a>
 </div>
@@ -16,12 +16,10 @@
 </div>
 
 <div class="admin-action-grid">
-  <a class="admin-action" href="{% url 'class_list_admin' %}"><strong>Classes & Subjects</strong><span>Create classes and assign subjects.</span></a>
-  <a class="admin-action" href="{% url 'student_list_admin' %}"><strong>Students</strong><span>View and add students.</span></a>
-  <a class="admin-action" href="{% url 'student_import' %}"><strong>Import Students</strong><span>Upload Excel student lists.</span></a>
-  <a class="admin-action" href="{% url 'admin_records' %}"><strong>Checking Records</strong><span>View/filter/export checking logs.</span></a>
-  <a class="admin-action" href="{% url 'attention_list' %}"><strong>Attention List</strong><span>Class-wise and student-wise attention lists.</span></a>
-  <a class="admin-action danger-zone" href="{% url 'delete_data_admin' %}?category=records"><strong>Delete Data</strong><span>Delete selected checking data when needed.</span></a>
+  <a class="admin-action" href="{% url 'admin_records' %}"><strong>Checking Records</strong><span>View, filter, and export checking logs.</span></a>
+  <a class="admin-action" href="{% url 'attention_list' %}"><strong>Attention List</strong><span>Class-wise and student-wise students needing attention.</span></a>
+  <a class="admin-action" href="{% url 'student_list_admin' %}"><strong>Student Profiles</strong><span>Open a student and view copy-checking history.</span></a>
+  <a class="admin-action" href="{% url 'admin_records' %}?export=1"><strong>Export Checking Excel</strong><span>Download filtered or full checking records.</span></a>
 </div>
 
 <section class="card table-wrap">

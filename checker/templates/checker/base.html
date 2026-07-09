@@ -21,11 +21,9 @@
           <a class="nav-link" href="{% url 'dashboard' %}">My Courses</a>
         {% endif %}
         {% if is_app_admin %}
-          <a class="nav-link" href="{% url 'admin_checking_side' %}">Checking Side</a>
-          <a class="nav-link" href="{% url 'admin_teaching_side' %}">Teaching Side</a>
-          <a class="nav-link" href="{% url 'admin_users' %}">Users</a>
-          <a class="nav-link" href="{% url 'backups_admin' %}">Backups</a>
-          <a class="nav-link danger-nav" href="{% url 'delete_data_admin' %}">Delete Data</a>
+          <a class="nav-link" href="{% url 'admin_setup_side' %}">School Setup</a>
+          <a class="nav-link" href="{% url 'admin_checking_side' %}">Copy Checking</a>
+          <a class="nav-link" href="{% url 'admin_teaching_side' %}">Teaching Progress</a>
         {% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline-form">
           {% csrf_token %}
