@@ -157,6 +157,18 @@ class TeacherCourseAssignmentForm(forms.ModelForm):
             classroom__is_active=True,
             subject__is_active=True,
         ).select_related('classroom', 'subject').order_by('classroom__name', 'classroom__section', 'subject__name')
+        self.fields['teacher'].label_from_instance = self._teacher_label
+        self.fields['class_subject'].label_from_instance = self._class_subject_label
+
+    @staticmethod
+    def _teacher_label(user):
+        profile = getattr(user, 'checker_profile', None)
+        display = profile.display_name if profile else user.username
+        return f'{display} (@{user.username})'
+
+    @staticmethod
+    def _class_subject_label(class_subject):
+        return f'{class_subject.classroom} - {class_subject.subject.name}'
 
     def clean(self):
         cleaned = super().clean()
@@ -216,7 +228,20 @@ class IssueWeekForm(forms.Form):
             is_active=True,
             classroom__is_active=True,
             subject__is_active=True,
-        ).select_related('classroom', 'subject').order_by('classroom__name', 'classroom__section', 'subject__name')
+            teacher_assignments__is_active=True,
+        ).select_related('classroom', 'subject').distinct().order_by('classroom__name', 'classroom__section', 'subject__name')
+        self.fields['teacher'].label_from_instance = self._teacher_label
+        self.fields['class_subject'].label_from_instance = self._class_subject_label
+
+    @staticmethod
+    def _teacher_label(user):
+        profile = getattr(user, 'checker_profile', None)
+        display = profile.display_name if profile else user.username
+        return f'{display} (@{user.username})'
+
+    @staticmethod
+    def _class_subject_label(class_subject):
+        return f'{class_subject.classroom} - {class_subject.subject.name}'
 
     def clean(self):
         cleaned = super().clean()

@@ -10,44 +10,59 @@ This version is ready for:
 
 ## Main modules
 
+### Admin
+
+The admin dashboard is split into three areas:
+
+- **School Setup**: classes, subjects, students, imports, users, teacher assignments, backups, and delete data.
+- **Copy Checking**: checking records, attention lists, student profiles, recent records, and Excel exports.
+- **Teaching Progress**: issue new week rows, teacher progress by class, teacher progress by teacher, and Excel export.
+
 ### Copy Checking
 
 - Checker login
-- Class → Subject → Chapter selection
-- Student list for selected class/chapter
-- Locked copy-checking records
-- Correction requests with requested new values
-- Admin review can approve and apply values automatically
-- Attention List for neglected class-subjects and students
+- Class-wise attention list
+- Flexible checking entries instead of chapter-wise checking
+- Checker selects a class, then adds one or more rows with student, subject, status, and details
+- Status options: Complete / Incomplete
+- Complete is selected by default
+- Details are required only for Incomplete rows
+- Batch save is all-or-nothing: if one row has an error, no rows are saved
+- Saved checking records are locked and cannot be edited by checkers
+- If a mistake happens, enter a new checking row instead of editing the old one
+- Admin can view/filter/export records to Excel
 
 ### Teacher Progress
 
 - Teacher login
-- Teacher dashboard with assigned courses
+- Teacher dashboard with assigned course cards
 - Admin assigns one active teacher to each class-subject
-- Teacher opens a course and adds rows with automatic **Week No** values
-- New rows start as **Not Completed**
-- Not Completed rows can be edited or deleted by the teacher
-- Completed rows are locked and cannot be edited/deleted by the teacher
-- No teacher-side correction request button
-- Admin can still edit a teacher progress row if correction is needed
-- Admin can view progress class-wise or teacher-wise
+- Admin issues new week rows from Teaching Progress → Issue New Week
+- Issue New Week uses each teacher-course assignment's own next week number
+- Example: if one course has Week 1 only, the next issued row is Week 2; if another course has no rows, the next issued row is Week 1
+- Teachers cannot create or delete week rows
+- Teachers only enter detail and mark pending rows as Completed
+- Detail is required before completing a week
+- Completed rows are locked
+- Admin can edit teacher progress rows if needed
 
-### Admin highlights
+## Initial user
 
-- Pending copy correction requests are shown with a star and highlighted button.
-- Admin does not need to open the correction page to know if requests are pending.
+Run the seed command to create the first admin account only when the database has no users:
 
-## Initial users
+```text
+username: admin
+password: {SmartChecking2026}
+```
 
-Run the seed command to create missing users:
+Use the braces exactly as written.
 
-Passwords are stored by Django as secure hashes for login. The app also keeps an admin-visible password note because that was requested for school account management.
+The seed command does not recreate deleted users and does not overwrite passwords when users already exist.
 
-Important: `seed_initial_users` now creates missing initial users only. It does not overwrite existing user passwords on redeploy. To intentionally reset them, run:
+To reset only the admin password intentionally:
 
 ```bat
-python manage.py seed_initial_users --reset-passwords
+python manage.py seed_initial_users --reset-admin-password
 ```
 
 ## Fresh setup on Windows
@@ -100,12 +115,14 @@ If phones cannot open it, allow Python/Django through Windows Firewall or allow 
 ## Admin setup order
 
 1. Login as admin.
-2. Create classes with subjects and chapter counts.
-3. Add/import students.
-4. Add users if needed: checker or teacher.
-5. Assign teacher courses from **Teacher Assignments**.
-6. Checkers can start copy-checking.
-7. Teachers can start course-progress entry.
+2. Open **School Setup**.
+3. Create classes and assign subjects.
+4. Add/import students.
+5. Create checker and teacher users if needed.
+6. Assign teachers to class-subjects from **Teacher Assignments**.
+7. Use **Teaching Progress → Issue New Week** to issue week rows.
+8. Checkers can start copy-checking.
+9. Teachers can complete issued week rows.
 
 ## Student import format
 
@@ -132,7 +149,7 @@ postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
 
 ### 2. Upload project to GitHub
 
-Upload this project folder to a GitHub repository.
+Upload this project folder to a GitHub repository. Do not upload `venv`, `db.sqlite3`, or local backup files.
 
 ### 3. Create Render Web Service
 
@@ -150,7 +167,7 @@ Suggested Render settings:
 
 ```text
 Build Command:
-./build.sh
+bash build.sh
 
 Start Command:
 gunicorn smart_copy_checking.wsgi:application
@@ -158,50 +175,23 @@ gunicorn smart_copy_checking.wsgi:application
 
 ### 4. Add Render environment variables
 
-Add these in Render:
-
 ```text
 DEBUG=False
-SECRET_KEY=<generate a long random secret>
-DATABASE_URL=<your Neon connection string>
+SECRET_KEY=your-long-random-secret-key
 ALLOWED_HOSTS=.onrender.com,localhost,127.0.0.1
-CSRF_TRUSTED_ORIGINS=https://YOUR-RENDER-SERVICE-NAME.onrender.com
+DATABASE_URL=your-neon-postgresql-url
+PYTHON_VERSION=3.13.4
 ```
 
-After the first deploy, replace `YOUR-RENDER-SERVICE-NAME` with the real Render URL.
+After deploy, open the Render URL and login with the admin account.
 
-### 5. First deploy
+## Backups
 
-During build, Render will run:
+The app supports app-level JSON backups from the Backups page.
 
-```text
-pip install -r requirements.txt
-python manage.py collectstatic --no-input
-python manage.py migrate
-python manage.py seed_initial_users
-```
+- Backups can be created manually
+- Backups are also triggered after important actions
+- Admin can download backup files
+- Admin can upload/restore a backup file from the same backup format
 
-The seed command is safe on redeploy because it will not reset existing passwords unless `--reset-passwords` is used.
-
-## Backup rule
-
-The app creates/updates one JSON backup file per active day after successful important changes, including:
-
-- copy-checking lock
-- copy correction approval
-- class setup change
-- student add/import
-- user create/reset/edit
-- teacher assignment change
-- teacher progress add/edit/delete/complete
-- admin teacher-progress edit
-
-Only active days create backups. The app keeps the latest 10 active-day backups.
-
-### Important online backup note
-
-On local Windows, backup files are saved in the project folder.
-
-On Render free hosting, files inside the app folder should not be treated as permanent storage. For online use, the admin should open **Backups** and click **Create & Download Backup Now** regularly.
-
-The actual live data is stored in Neon PostgreSQL. The backup download is an extra school-side copy.
+For dangerous deletes, create/download a backup first.

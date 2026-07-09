@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>{{ assignment.classroom }} — {{ assignment.subject.name }}</h1>
-    <p class="muted">Teacher: {{ assignment.teacher.checker_profile.display_name|default:assignment.teacher.username }}</p>
+    <p class="muted">Teacher: {{ assignment.teacher.checker_profile.display_name|default:assignment.teacher.username }} <span class="muted small">@{{ assignment.teacher.username }}</span></p>
   </div>
 </div>
 <div class="stats-grid">

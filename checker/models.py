@@ -70,7 +70,7 @@ class ClassSubject(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.classroom} - {self.subject.name} ({self.chapter_count} chapters)'
+        return f'{self.classroom} - {self.subject.name}'
 
 
 class ClassSubjectChapter(models.Model):
@@ -195,8 +195,6 @@ class CopyCheckRecord(models.Model):
         return self.entered_by.username
 
     def __str__(self):
-        if self.chapter_id:
-            return f'{self.student.full_name} | {self.subject.name} | {self.chapter.title}'
         return f'{self.student.full_name} | {self.subject.name} | {self.get_status_display()}'
 
 

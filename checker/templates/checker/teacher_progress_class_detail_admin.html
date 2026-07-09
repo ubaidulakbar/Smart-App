@@ -14,7 +14,7 @@
         {% for row in rows %}
           <tr>
             <td>{{ row.assignment.subject.name }}</td>
-            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }}</td>
+            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }} <span class="muted small">@{{ row.assignment.teacher.username }}</span></td>
             <td>{{ row.total }}</td><td>{{ row.completed }}</td><td>{{ row.not_completed }}</td><td>{{ row.progress }}%</td>
             <td><a class="small-button" href="{% url 'teacher_progress_assignment_detail_admin' row.assignment.id %}">Open Details</a></td>
           </tr>

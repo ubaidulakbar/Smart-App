@@ -10,7 +10,7 @@
     {% for teacher in teachers %}
       <a class="admin-action" href="{% url 'teacher_progress_teacher_detail_admin' teacher.id %}">
         <strong>{{ teacher.checker_profile.display_name|default:teacher.username }}</strong>
-        <span>{{ teacher.assignment_count }} active course assignment(s)</span>
+        <span>@{{ teacher.username }} · {{ teacher.assignment_count }} active course assignment(s)</span>
       </a>
     {% empty %}<p class="muted">No teacher users found.</p>{% endfor %}
   </div>

@@ -25,13 +25,14 @@
   <h2>Assignments</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Status</th><th>Action</th></tr></thead>
+      <thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Username</th><th>Status</th><th>Action</th></tr></thead>
       <tbody>
         {% for item in assignments %}
           <tr>
             <td>{{ item.classroom }}</td>
             <td>{{ item.subject.name }}</td>
             <td>{{ item.teacher.checker_profile.display_name|default:item.teacher.username }}</td>
+            <td>@{{ item.teacher.username }}</td>
             <td>{% if item.is_active %}<span class="badge success">Active</span>{% else %}<span class="badge soft">Inactive</span>{% endif %}</td>
             <td>
               {% if item.is_active %}
@@ -41,7 +42,7 @@
               {% else %}—{% endif %}
             </td>
           </tr>
-        {% empty %}<tr><td colspan="5">No assignments yet.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="6">No assignments yet.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

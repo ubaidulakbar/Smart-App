@@ -376,7 +376,7 @@ def admin_teaching_side(request):
         'teacher_assignments_count': TeacherCourseAssignment.objects.filter(is_active=True).count(),
         'teacher_pending_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_NOT_COMPLETED).count(),
         'teacher_completed_count': TeacherCourseProgress.objects.filter(status=TeacherCourseProgress.STATUS_COMPLETED).count(),
-        'next_week_no': (TeacherCourseProgress.objects.aggregate(max_week=Max('week_no'))['max_week'] or 0) + 1,
+        'next_week_display': 'Per course',
         'recent_teacher_progress': TeacherCourseProgress.objects.select_related(
             'assignment__teacher__checker_profile',
             'assignment__class_subject__classroom',
@@ -1171,6 +1171,61 @@ def _assignment_summary(assignment):
     }
 
 
+def _teacher_assignment_queryset():
+    return TeacherCourseAssignment.objects.filter(
+        is_active=True,
+        teacher__is_active=True,
+        teacher__checker_profile__role=UserProfile.ROLE_TEACHER,
+        teacher__checker_profile__is_active_checker=True,
+        class_subject__is_active=True,
+        class_subject__classroom__is_active=True,
+        class_subject__subject__is_active=True,
+    ).select_related(
+        'teacher__checker_profile',
+        'class_subject__classroom',
+        'class_subject__subject',
+    )
+
+
+def _assignment_next_week_no(assignment):
+    latest = assignment.progress_rows.aggregate(max_week=Max('week_no'))['max_week'] or 0
+    return latest + 1
+
+
+def _issue_week_rows_for_assignments(assignments):
+    rows = []
+    for assignment in assignments:
+        next_week_no = _assignment_next_week_no(assignment)
+        rows.append({
+            'assignment': assignment,
+            'next_week_no': next_week_no,
+            'teacher_name': _display_user(assignment.teacher),
+            'teacher_username': assignment.teacher.username,
+            'classroom': assignment.classroom,
+            'subject': assignment.subject,
+            'existing_weeks': assignment.progress_rows.count(),
+        })
+    return rows
+
+
+def _scope_filtered_assignments(form):
+    assignments = _teacher_assignment_queryset()
+    scope = form.cleaned_data['scope']
+    if scope == IssueWeekForm.SCOPE_TEACHER:
+        assignments = assignments.filter(teacher=form.cleaned_data['teacher'])
+    elif scope == IssueWeekForm.SCOPE_CLASS:
+        assignments = assignments.filter(class_subject__classroom=form.cleaned_data['classroom'])
+    elif scope == IssueWeekForm.SCOPE_COURSE:
+        assignments = assignments.filter(class_subject=form.cleaned_data['class_subject'])
+    return assignments.order_by(
+        'teacher__checker_profile__display_name',
+        'teacher__username',
+        'class_subject__classroom__name',
+        'class_subject__classroom__section',
+        'class_subject__subject__name',
+    )
+
+
 @app_admin_required
 def admin_user_create(request):
     if request.method == 'POST':
@@ -1273,36 +1328,32 @@ def teacher_quick_update(request):
 
 @app_admin_required
 def issue_week_admin(request):
-    next_week_no = (TeacherCourseProgress.objects.aggregate(max_week=Max('week_no'))['max_week'] or 0) + 1
-    preview_assignments = None
-    created_count = None
-    skipped_count = None
+    preview_rows = None
+    created_rows = None
+    skipped_rows = None
 
     if request.method == 'POST':
         form = IssueWeekForm(request.POST)
         if form.is_valid():
-            assignments = TeacherCourseAssignment.objects.filter(
-                is_active=True,
-                class_subject__is_active=True,
-                class_subject__classroom__is_active=True,
-                class_subject__subject__is_active=True,
-            ).select_related('teacher__checker_profile', 'class_subject__classroom', 'class_subject__subject')
-            scope = form.cleaned_data['scope']
-            if scope == IssueWeekForm.SCOPE_TEACHER:
-                assignments = assignments.filter(teacher=form.cleaned_data['teacher'])
-            elif scope == IssueWeekForm.SCOPE_CLASS:
-                assignments = assignments.filter(class_subject__classroom=form.cleaned_data['classroom'])
-            elif scope == IssueWeekForm.SCOPE_COURSE:
-                assignments = assignments.filter(class_subject=form.cleaned_data['class_subject'])
+            assignments = _scope_filtered_assignments(form)
+            issue_rows = _issue_week_rows_for_assignments(assignments)
 
-            if 'preview' in request.POST:
-                preview_assignments = list(assignments)
-                messages.info(request, f'Preview ready for Week {next_week_no}. {len(preview_assignments)} active assignment(s) match this scope.')
+            if not issue_rows:
+                messages.error(
+                    request,
+                    'No active teacher-course assignment matched this scope. Go to School Setup → Teacher Assignments and make sure the teacher has an active class-subject assignment.'
+                )
+                preview_rows = []
+            elif 'preview' in request.POST:
+                preview_rows = issue_rows
+                messages.info(request, f'Preview ready. {len(preview_rows)} active assignment(s) matched this scope.')
             elif request.POST.get('confirm') == 'yes':
+                created_rows = []
+                skipped_rows = []
                 with transaction.atomic():
-                    created_count = 0
-                    skipped_count = 0
-                    for assignment in assignments.select_for_update():
+                    locked_assignments = _scope_filtered_assignments(form).select_for_update()
+                    for assignment in locked_assignments:
+                        next_week_no = _assignment_next_week_no(assignment)
                         obj, created = TeacherCourseProgress.objects.get_or_create(
                             assignment=assignment,
                             week_no=next_week_no,
@@ -1312,23 +1363,37 @@ def issue_week_admin(request):
                                 'locked': False,
                             },
                         )
+                        row = {
+                            'assignment': assignment,
+                            'week_no': next_week_no,
+                            'teacher_name': _display_user(assignment.teacher),
+                            'teacher_username': assignment.teacher.username,
+                            'classroom': assignment.classroom,
+                            'subject': assignment.subject,
+                        }
                         if created:
-                            created_count += 1
+                            created_rows.append(row)
                             log_action(request.user, 'ISSUE_TEACHER_WEEK', obj, f'Issued week {next_week_no} for {assignment}')
                         else:
-                            skipped_count += 1
-                ensure_daily_backup(reason=f'Admin issued Week {next_week_no}', user=request.user)
-                messages.success(request, f'Week {next_week_no} issued. Created: {created_count}. Skipped existing: {skipped_count}.')
-                return redirect('issue_week_admin')
+                            skipped_rows.append(row)
+
+                if created_rows:
+                    ensure_daily_backup(reason='Admin issued new teacher week rows', user=request.user)
+                    messages.success(request, f'Issued new week rows. Created: {len(created_rows)}. Skipped existing: {len(skipped_rows)}.')
+                else:
+                    messages.warning(request, 'No week rows were created. Check whether active teacher-course assignments exist for this scope.')
+                preview_rows = _issue_week_rows_for_assignments(_scope_filtered_assignments(form))
     else:
         form = IssueWeekForm(initial={'scope': IssueWeekForm.SCOPE_ALL})
 
+    total_active_assignments = _teacher_assignment_queryset().count()
+
     return render(request, 'checker/issue_week_admin.html', {
         'form': form,
-        'next_week_no': next_week_no,
-        'preview_assignments': preview_assignments,
-        'created_count': created_count,
-        'skipped_count': skipped_count,
+        'preview_rows': preview_rows,
+        'created_rows': created_rows,
+        'skipped_rows': skipped_rows,
+        'total_active_assignments': total_active_assignments,
     })
 
 

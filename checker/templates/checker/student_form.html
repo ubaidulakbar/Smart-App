@@ -3,7 +3,7 @@
 {% block content %}
 <section class="card narrow">
   <h1>Add Student</h1>
-  <p class="muted">Only roll no and student name are required. Subjects and chapters come from the selected class setup.</p>
+  <p class="muted">Only roll no and student name are required. Subjects come from the selected class setup.</p>
   <form method="post" class="form-stack">
     {% csrf_token %}
     {{ form.as_p }}

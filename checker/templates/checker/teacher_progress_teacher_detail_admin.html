@@ -2,7 +2,7 @@
 {% block title %}Teacher Progress{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>{{ teacher.checker_profile.display_name|default:teacher.username }} — Progress</h1><p class="muted">Click a course to see week details.</p></div>
+  <div><h1>{{ teacher.checker_profile.display_name|default:teacher.username }} (@{{ teacher.username }}) — Progress</h1><p class="muted">Click a course to see week details.</p></div>
   <a class="button" href="{% url 'teacher_progress_teachers_admin' %}">Back</a>
   <div class="button-row"><a class="button" href="{% url 'teacher_progress_export' %}">Export Excel</a><a class="button" href="{% url 'admin_teaching_side' %}">Teaching Side</a></div>
 </div>

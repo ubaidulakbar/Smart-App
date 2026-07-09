@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Teaching Progress</h1>
-    <p class="muted">Issue weeks, view teacher progress, and export teaching data.</p>
+    <p class="muted">Issue week rows, view teacher progress, and export teaching data.</p>
   </div>
   <a class="button" href="{% url 'dashboard' %}">Back to Admin Dashboard</a>
 </div>
@@ -13,11 +13,11 @@
   <div class="stat-card"><span>Active Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
   <div class="stat-card"><span>Pending Weeks</span><strong>{{ teacher_pending_count }}</strong></div>
   <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>
-  <div class="stat-card"><span>Next Week No</span><strong>{{ next_week_no }}</strong></div>
+  <div class="stat-card"><span>Issue Rule</span><strong>Per Course +1</strong></div>
 </div>
 
 <div class="admin-action-grid">
-  <a class="admin-action primary-action" href="{% url 'issue_week_admin' %}"><strong>Issue New Week</strong><span>Create Week {{ next_week_no }} rows for all or selected teachers.</span></a>
+  <a class="admin-action primary-action" href="{% url 'issue_week_admin' %}"><strong>Issue New Week</strong><span>Create the next week row for all or selected active teacher-course assignments.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_classes_admin' %}"><strong>Progress by Class</strong><span>Open class-wise teaching progress.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_teachers_admin' %}"><strong>Progress by Teacher</strong><span>Open teacher-wise teaching progress.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_export' %}"><strong>Export Teacher Excel</strong><span>Download all teacher progress.</span></a>
@@ -31,10 +31,10 @@
       <tbody>
         {% for row in recent_teacher_progress %}
           <tr>
-            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }}</td>
+            <td>{{ row.assignment.teacher.checker_profile.display_name|default:row.assignment.teacher.username }} <span class="muted small">@{{ row.assignment.teacher.username }}</span></td>
             <td>{{ row.assignment.classroom }}</td>
             <td>{{ row.assignment.subject.name }}</td>
-            <td>{{ row.week_no }}</td>
+            <td>Week {{ row.week_no }}</td>
             <td>{{ row.get_status_display }}</td>
             <td>{{ row.updated_at|date:'d M Y, h:i A' }}</td>
           </tr>
