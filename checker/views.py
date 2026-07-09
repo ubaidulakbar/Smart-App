@@ -821,7 +821,7 @@ def student_import(request):
     })
 
 
-@login_required
+@app_admin_required
 def student_profile(request, student_id):
     student = get_object_or_404(Student.objects.select_related('classroom'), pk=student_id)
     subject_id = request.GET.get('subject')

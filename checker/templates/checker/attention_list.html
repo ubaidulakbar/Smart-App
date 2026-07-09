@@ -39,7 +39,7 @@
           <tr>
             <td>{{ forloop.counter }}</td>
             <td>{{ row.student.roll_no }}</td>
-            <td><a href="{% url 'student_profile' row.student.id %}">{{ row.student.full_name }}</a></td>
+            <td>{% if is_admin_view %}<a href="{% url 'student_profile' row.student.id %}">{{ row.student.full_name }}</a>{% else %}{{ row.student.full_name }}{% endif %}</td>
             <td>{{ row.last_checked_label }}</td>
             <td>{% if row.days_since is not None %}{{ row.days_since }}{% else %}—{% endif %}</td>
             <td>{{ row.last_subject }}</td>
