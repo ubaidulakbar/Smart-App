@@ -18,55 +18,36 @@ from .models import (
 
 class SelectCheckForm(forms.Form):
     classroom = forms.ModelChoiceField(queryset=ClassRoom.objects.filter(is_active=True), label='Class / Section')
-    class_subject = forms.ModelChoiceField(queryset=ClassSubject.objects.none(), label='Subject')
-    chapter = forms.ModelChoiceField(queryset=ClassSubjectChapter.objects.none(), label='Chapter')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        classroom_id = self.data.get('classroom') or self.initial.get('classroom')
-        class_subject_id = self.data.get('class_subject') or self.initial.get('class_subject')
-
-        if classroom_id:
-            self.fields['class_subject'].queryset = ClassSubject.objects.filter(
-                classroom_id=classroom_id,
-                is_active=True,
-                subject__is_active=True,
-            ).select_related('subject', 'classroom')
-        else:
-            self.fields['class_subject'].queryset = ClassSubject.objects.filter(
-                is_active=True,
-                subject__is_active=True,
-            ).select_related('subject', 'classroom')
-
-        if class_subject_id:
-            self.fields['chapter'].queryset = ClassSubjectChapter.objects.filter(
-                class_subject_id=class_subject_id,
-                is_active=True,
-            )
-        else:
-            self.fields['chapter'].queryset = ClassSubjectChapter.objects.none()
-
-    def clean(self):
-        cleaned = super().clean()
-        classroom = cleaned.get('classroom')
-        class_subject = cleaned.get('class_subject')
-        chapter = cleaned.get('chapter')
-        if classroom and class_subject and class_subject.classroom_id != classroom.id:
-            self.add_error('class_subject', 'This subject is not assigned to the selected class.')
-        if class_subject and chapter and chapter.class_subject_id != class_subject.id:
-            self.add_error('chapter', 'This chapter is not assigned to the selected subject.')
-        return cleaned
 
 
 class LockRecordForm(forms.Form):
-    status = forms.ChoiceField(choices=CopyCheckRecord.STATUS_CHOICES)
-    remarks = forms.CharField(widget=forms.Textarea(attrs={'rows': 2}), required=False)
+    status = forms.ChoiceField(choices=CopyCheckRecord.STATUS_CHOICES, initial=CopyCheckRecord.STATUS_COMPLETE)
+    remarks = forms.CharField(widget=forms.Textarea(attrs={'rows': 2}), required=False, label='Details')
     actual_checker_name = forms.CharField(
         max_length=120,
         required=False,
         label='Actual checker name if different',
         help_text='Leave blank when the logged-in checker did the checking.',
     )
+
+    def clean(self):
+        cleaned = super().clean()
+        status = cleaned.get('status')
+        remarks = (cleaned.get('remarks') or '').strip()
+        if status == CopyCheckRecord.STATUS_INCOMPLETE and not remarks:
+            self.add_error('remarks', 'Details are required when status is Incomplete.')
+        cleaned['remarks'] = remarks
+        return cleaned
+
+
+class BackupUploadForm(forms.Form):
+    file = forms.FileField(label='JSON backup file')
+
+    def clean_file(self):
+        uploaded = self.cleaned_data['file']
+        if not uploaded.name.lower().endswith('.json'):
+            raise forms.ValidationError('Upload the JSON backup file created by this app.')
+        return uploaded
 
 
 class CorrectionRequestForm(forms.ModelForm):

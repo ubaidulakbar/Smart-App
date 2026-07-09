@@ -1,65 +1,124 @@
 {% extends 'checker/base.html' %}
-{% block title %}Checking List{% endblock %}
+{% block title %}Check Copies{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>{{ classroom }}</h1>
-    <p class="muted">{{ subject.name }} · {{ chapter.title }}</p>
+    <p class="muted">Add flexible notebook-checking entries. Saved rows are locked and cannot be edited.</p>
   </div>
   <div class="actions">
-    <a class="button big-action" href="{{ refresh_url }}">Refresh Records</a>
-    <a class="button big-action" href="{% url 'select_checking' %}">Change Selection</a>
+    <a class="button big-action" href="{{ refresh_url }}">Refresh</a>
+    <a class="button big-action" href="{% url 'select_checking' %}">Change Class</a>
   </div>
 </div>
 
 <section class="card">
-  <div class="student-list">
-    {% for row in rows %}
-      <div class="student-row {% if row.record.locked %}locked{% endif %}">
-        <div class="student-main">
-          <strong>{{ row.student.full_name }}</strong>
-          <span class="muted">Roll No: {{ row.student.roll_no }}</span>
-        </div>
-
-        {% if row.record and row.record.locked %}
-          <div class="locked-box">
-            <span class="badge">{{ row.record.get_status_display }}</span>
-            <p>{{ row.record.remarks|default:'No remarks' }}</p>
-            <p class="muted small">Entered by: {{ row.record.entered_by.checker_profile.display_name|default:row.record.entered_by.username }} · Actual checker: {{ row.record.actual_checker_display }} · {{ row.record.locked_at|date:'d M Y, h:i A' }}</p>
-            <a class="button small-button" href="{% url 'request_correction' row.record.id %}">Request Correction</a>
-          </div>
-        {% else %}
-          <form method="post" action="{% url 'lock_record' %}" class="record-form">
-            {% csrf_token %}
-            <input type="hidden" name="student_id" value="{{ row.student.id }}">
-            <input type="hidden" name="class_subject_id" value="{{ class_subject.id }}">
-            <input type="hidden" name="chapter_id" value="{{ chapter.id }}">
-            <input type="hidden" name="next" value="{{ refresh_url }}">
-            <label>Status
-              <select name="status">
-                <option value="checked">Checked</option>
-                <option value="not_checked">Not Checked</option>
-                <option value="absent">Absent</option>
-                <option value="not_submitted">Copy Not Submitted</option>
-                <option value="incomplete">Incomplete</option>
-              </select>
-            </label>
-            <label>Remarks
-              <textarea name="remarks" rows="2" placeholder="Optional comment"></textarea>
-            </label>
-            <details>
-              <summary>Actual checker if different</summary>
-              <label>Name
-                <input type="text" name="actual_checker_name" placeholder="Leave blank if you checked it yourself">
-              </label>
-            </details>
-            <button class="primary danger-safe big-action" type="submit">Lock</button>
-          </form>
-        {% endif %}
-      </div>
-    {% empty %}
-      <p>No students found in this class/section.</p>
-    {% endfor %}
+  <div class="section-head">
+    <div>
+      <h2>Class Attention List</h2>
+      <p class="muted small">Students never checked or checked longest ago appear first.</p>
+    </div>
+    <a class="button" href="{% url 'attention_list' %}?classroom={{ classroom.id }}&show=more">Show More</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Roll No</th><th>Student</th><th>Last Checked</th><th>Last Subject</th><th>Last Status</th><th>Checks</th><th>Incomplete</th></tr></thead>
+      <tbody>
+        {% for row in attention_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ row.student.roll_no }}</td>
+            <td>{{ row.student.full_name }}</td>
+            <td>{{ row.last_checked_label }}</td>
+            <td>{{ row.last_subject }}</td>
+            <td>{{ row.last_status }}</td>
+            <td>{{ row.total_checks }}</td>
+            <td>{{ row.incomplete_count }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="8">No active students found in this class.</td></tr>{% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
+
+<section class="card">
+  <h2>New Checking Entries</h2>
+  <p class="muted small">Tick rows you want to save. Complete is selected by default. Details are required only for Incomplete.</p>
+  <form method="post" action="{% url 'lock_record' %}" id="batch-form">
+    {% csrf_token %}
+    <input type="hidden" name="classroom_id" value="{{ classroom.id }}">
+    <input type="hidden" name="next" value="{{ refresh_url }}">
+    <div class="table-wrap">
+      <table id="entry-table" class="entry-table">
+        <thead><tr><th>Save</th><th>Student</th><th>Subject</th><th>Status</th><th>Details</th><th>Actual Checker if Different</th></tr></thead>
+        <tbody>
+          {% for i in "01234" %}
+            <tr class="entry-row">
+              <td><input type="checkbox" name="save_row" value="{{ forloop.counter0 }}" checked></td>
+              <td>
+                <select name="student_id">
+                  <option value="">Select student</option>
+                  {% for student in students %}<option value="{{ student.id }}">{{ student.roll_no }} - {{ student.full_name }}</option>{% endfor %}
+                </select>
+              </td>
+              <td>
+                <select name="class_subject_id">
+                  <option value="">Select subject</option>
+                  {% for item in class_subjects %}<option value="{{ item.id }}">{{ item.subject.name }}</option>{% endfor %}
+                </select>
+              </td>
+              <td>
+                <select name="status">
+                  <option value="complete" selected>Complete</option>
+                  <option value="incomplete">Incomplete</option>
+                </select>
+              </td>
+              <td><textarea name="remarks" rows="2" placeholder="Required if incomplete"></textarea></td>
+              <td><input type="text" name="actual_checker_name" placeholder="Optional"></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="button-row">
+      <button class="button" type="button" id="add-row">+ Add Row</button>
+      <button class="primary big-action" type="submit">Save All Selected Rows</button>
+    </div>
+  </form>
+</section>
+
+<section class="card table-wrap">
+  <h2>Recent Records for {{ classroom }}</h2>
+  <table>
+    <thead><tr><th>Date</th><th>Student</th><th>Subject</th><th>Status</th><th>Details</th><th>Entered By</th></tr></thead>
+    <tbody>
+      {% for r in recent_records %}
+        <tr><td>{{ r.locked_at|date:'d M Y, h:i A' }}</td><td>{{ r.student.full_name }}</td><td>{{ r.subject.name }}</td><td>{{ r.get_status_display }}</td><td>{{ r.remarks|default:'—' }}</td><td>{{ r.entered_by.checker_profile.display_name|default:r.entered_by.username }}</td></tr>
+      {% empty %}<tr><td colspan="6">No records for this class yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+(function () {
+  const tableBody = document.querySelector('#entry-table tbody');
+  const addButton = document.getElementById('add-row');
+  function refreshIndexes() {
+    tableBody.querySelectorAll('tr').forEach((row, index) => {
+      const checkbox = row.querySelector('input[type="checkbox"][name="save_row"]');
+      checkbox.value = index;
+    });
+  }
+  addButton.addEventListener('click', function () {
+    const first = tableBody.querySelector('tr');
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('select').forEach(select => { select.selectedIndex = 0; });
+    clone.querySelector('select[name="status"]').value = 'complete';
+    clone.querySelectorAll('textarea,input[type="text"]').forEach(input => { input.value = ''; });
+    clone.querySelector('input[type="checkbox"]').checked = true;
+    tableBody.appendChild(clone);
+    refreshIndexes();
+  });
+})();
+</script>
 {% endblock %}

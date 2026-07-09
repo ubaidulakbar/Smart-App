@@ -118,24 +118,30 @@ class Student(models.Model):
 
 
 class CopyCheckRecord(models.Model):
-    STATUS_CHECKED = 'checked'
+    STATUS_COMPLETE = 'complete'
+    STATUS_INCOMPLETE = 'incomplete'
+    # Legacy status names are kept as aliases so old data/backups do not break.
+    STATUS_CHECKED = STATUS_COMPLETE
     STATUS_NOT_CHECKED = 'not_checked'
     STATUS_ABSENT = 'absent'
     STATUS_NOT_SUBMITTED = 'not_submitted'
-    STATUS_INCOMPLETE = 'incomplete'
     STATUS_CHOICES = [
-        (STATUS_CHECKED, 'Checked'),
-        (STATUS_NOT_CHECKED, 'Not Checked'),
-        (STATUS_ABSENT, 'Absent'),
-        (STATUS_NOT_SUBMITTED, 'Copy Not Submitted'),
+        (STATUS_COMPLETE, 'Complete'),
         (STATUS_INCOMPLETE, 'Incomplete'),
     ]
 
     student = models.ForeignKey(Student, on_delete=models.PROTECT, related_name='copy_records')
     classroom = models.ForeignKey(ClassRoom, on_delete=models.PROTECT, related_name='copy_records')
     class_subject = models.ForeignKey(ClassSubject, on_delete=models.PROTECT, related_name='copy_records')
-    chapter = models.ForeignKey(ClassSubjectChapter, on_delete=models.PROTECT, related_name='copy_records')
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_CHECKED)
+    # Legacy chapter field. New checking records do not use chapters.
+    chapter = models.ForeignKey(
+        ClassSubjectChapter,
+        on_delete=models.PROTECT,
+        related_name='copy_records',
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_COMPLETE)
     remarks = models.TextField(blank=True)
 
     entered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='entered_copy_records')
@@ -159,10 +165,7 @@ class CopyCheckRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-locked_at', 'student__full_name']
-        constraints = [
-            models.UniqueConstraint(fields=['student', 'chapter'], name='unique_student_chapter_record')
-        ]
+        ordering = ['-locked_at', '-created_at', 'student__full_name']
 
     @property
     def subject(self):
@@ -192,7 +195,9 @@ class CopyCheckRecord(models.Model):
         return self.entered_by.username
 
     def __str__(self):
-        return f'{self.student.full_name} | {self.subject.name} | {self.chapter.title}'
+        if self.chapter_id:
+            return f'{self.student.full_name} | {self.subject.name} | {self.chapter.title}'
+        return f'{self.student.full_name} | {self.subject.name} | {self.get_status_display()}'
 
 
 class CorrectionRequest(models.Model):

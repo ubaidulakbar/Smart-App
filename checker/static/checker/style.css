@@ -257,3 +257,28 @@ button.danger:hover, .button.danger:hover, .small-button.danger:hover { backgrou
   .admin-choice { min-height: 130px; padding: 22px; }
   .admin-choice strong { font-size: 23px; }
 }
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.entry-table select,
+.entry-table textarea,
+.entry-table input[type="text"] {
+  min-width: 160px;
+}
+
+.entry-table textarea {
+  width: 220px;
+}
+
+@media (max-width: 720px) {
+  .entry-table select,
+  .entry-table textarea,
+  .entry-table input[type="text"] {
+    min-width: 140px;
+  }
+}

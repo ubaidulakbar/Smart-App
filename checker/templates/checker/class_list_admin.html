@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Classes</h1>
-    <p class="muted">Create a class with its subjects and chapter counts first.</p>
+    <p class="muted">Create a class and assign its subjects first.</p>
   </div>
   <a class="button primary" href="{% url 'class_setup_add' %}">Add Class</a>
 </div>
@@ -18,7 +18,7 @@
           <td>{{ c }}</td>
           <td>
             {% for cs in c.class_subjects.all %}
-              {% if cs.is_active %}<span class="badge soft">{{ cs.subject.name }}: {{ cs.chapter_count }}</span>{% endif %}
+              {% if cs.is_active %}<span class="badge soft">{{ cs.subject.name }}</span>{% endif %}
             {% empty %}—{% endfor %}
           </td>
           <td>{{ c.students.count }}</td>

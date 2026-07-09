@@ -52,5 +52,6 @@ urlpatterns = [
 
     path('backups/', views.backups_admin, name='backups_admin'),
     path('backups/create/', views.backup_now, name='backup_now'),
+    path('backups/upload/', views.backup_upload, name='backup_upload'),
     path('backups/<int:backup_id>/download/', views.backup_download, name='backup_download'),
 ]

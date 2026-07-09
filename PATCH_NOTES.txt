@@ -1,0 +1,34 @@
+Smart Copy Checking flexible-checking patch
+
+Copy these files into the same paths in your existing project.
+This patch changes copy checking from chapter-wise records to flexible locked checking entries:
+Class -> student/subject/status/details rows.
+
+Important:
+- Includes migration 0003_flexible_copy_checking.py. Run python manage.py migrate locally and Render will run migrations during build.
+- Existing data is not intentionally deleted by this code update.
+- Correction requests for copy checking are no longer used; users add a new locked row instead.
+- Admin can export records, attention lists, and student profiles to Excel.
+- Backups page now has upload/restore for the app's JSON backup files.
+
+Changed/added files:
+checker/models.py
+checker/forms.py
+checker/views.py
+checker/urls.py
+checker/migrations/0003_flexible_copy_checking.py
+checker/static/checker/style.css
+checker/templates/checker/select_checking.html
+checker/templates/checker/checking_list.html
+checker/templates/checker/attention_list.html
+checker/templates/checker/admin_records.html
+checker/templates/checker/student_profile.html
+checker/templates/checker/class_setup.html
+checker/templates/checker/class_list_admin.html
+checker/templates/checker/backups_admin.html
+checker/templates/checker/checker_dashboard.html
+checker/templates/checker/admin_checking_side.html
+checker/templates/checker/admin_dashboard.html
+checker/templates/checker/request_correction.html
+checker/templates/checker/correction_requests_admin.html
+checker/templates/checker/review_correction_request.html

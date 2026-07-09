@@ -4,80 +4,83 @@
 <div class="page-head">
   <div>
     <h1>Attention List</h1>
-    <p class="muted">Showing top {{ limit }}. Items with no checking or oldest checking date appear first.</p>
+    <p class="muted">Select a class to see students who should be checked first.</p>
   </div>
   <div class="button-row">
-    {% if not show_more %}<a class="button primary" href="{% url 'attention_list' %}?show=more">Show More: Top {{ more_limit }}</a>{% else %}<a class="button" href="{% url 'attention_list' %}">Show Less</a>{% endif %}
-    {% if is_checker %}<a class="button" href="{% url 'select_checking' %}">Start Checking</a>{% endif %}
+    {% if selected_classroom %}
+      {% if not show_more %}<a class="button primary" href="{% url 'attention_list' %}?classroom={{ selected_classroom.id }}&show=more">Show More: Top {{ more_limit }}</a>{% else %}<a class="button" href="{% url 'attention_list' %}?classroom={{ selected_classroom.id }}">Show Less</a>{% endif %}
+      <a class="button" href="{% url 'attention_list' %}?classroom={{ selected_classroom.id }}&export=class">Export Class Attention</a>
+    {% endif %}
+    {% if is_admin_view %}<a class="button" href="{% url 'attention_list' %}?export=student">Export Student Top 50</a>{% endif %}
   </div>
 </div>
 
-<section class="card">
-  <div class="section-head">
-    <div>
-      <h2>Class / Subject Wise</h2>
-      <p class="muted small">Sorted by never checked first, oldest checking date, then lowest progress.</p>
-    </div>
-  </div>
-  <div class="attention-cards">
-    {% for row in class_subject_rows %}
-      <article class="attention-card">
-        <div class="attention-topline">
-          <div>
-            <strong>{{ forloop.counter }}. {{ row.classroom }} — {{ row.subject.name }}</strong>
-            <p class="muted small">Last checked: {{ row.last_checked_label }}</p>
-          </div>
-          <span class="progress-pill">{{ row.progress }}%</span>
-        </div>
-        <div class="progress-bar"><span style="width: {{ row.progress }}%"></span></div>
-        <dl class="attention-meta">
-          <div><dt>Students</dt><dd>{{ row.total_students }}</dd></div>
-          <div><dt>Chapters</dt><dd>{{ row.total_chapters }}</dd></div>
-          <div><dt>Expected</dt><dd>{{ row.expected_records }}</dd></div>
-          <div><dt>Checked</dt><dd>{{ row.checked_records }}</dd></div>
-          <div><dt>Pending</dt><dd>{{ row.pending_records }}</dd></div>
-          <div><dt>Pending Chapters</dt><dd>{{ row.pending_chapters }}</dd></div>
-          <div><dt>Last Chapter</dt><dd>{{ row.last_chapter }}</dd></div>
-          <div><dt>Last Checker</dt><dd>{{ row.last_checker }}</dd></div>
-        </dl>
-        {% if is_checker %}
-          <a class="button primary" href="{% url 'select_checking' %}?classroom={{ row.classroom.id }}&class_subject={{ row.class_subject.id }}">Open</a>
-        {% endif %}
-      </article>
-    {% empty %}
-      <p class="muted">No class-subject setup found yet.</p>
-    {% endfor %}
-  </div>
+<section class="card narrow">
+  <form method="get" class="form-stack quick-select-form">
+    <label>Class / Section
+      <select name="classroom" required>
+        <option value="">Select class</option>
+        {% for classroom in classes %}<option value="{{ classroom.id }}" {% if selected_classroom and selected_classroom.id == classroom.id %}selected{% endif %}>{{ classroom }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="primary big-action" type="submit">Show Attention List</button>
+  </form>
 </section>
 
+{% if selected_classroom %}
 <section class="card">
-  <h2>Student Wise</h2>
-  <p class="muted small">Students with no checking record or the oldest last-checking date appear first.</p>
-  <div class="attention-cards">
-    {% for row in student_rows %}
-      <article class="attention-card">
-        <div class="attention-topline">
-          <div>
-            <strong>{{ forloop.counter }}. {{ row.student.full_name }}</strong>
-            <p class="muted small">{{ row.classroom }} · Roll No: {{ row.student.roll_no }}</p>
-          </div>
-          <span class="progress-pill">{{ row.progress }}%</span>
-        </div>
-        <div class="progress-bar"><span style="width: {{ row.progress }}%"></span></div>
-        <dl class="attention-meta">
-          <div><dt>Last Checked</dt><dd>{{ row.last_checked_label }}</dd></div>
-          <div><dt>Expected</dt><dd>{{ row.total_expected }}</dd></div>
-          <div><dt>Checked</dt><dd>{{ row.checked_records }}</dd></div>
-          <div><dt>Pending</dt><dd>{{ row.pending_records }}</dd></div>
-          <div><dt>Last Subject</dt><dd>{{ row.last_subject }}</dd></div>
-          <div><dt>Last Chapter</dt><dd>{{ row.last_chapter }}</dd></div>
-          <div><dt>Last Checker</dt><dd>{{ row.last_checker }}</dd></div>
-        </dl>
-        <a class="button primary" href="{% url 'student_profile' row.student.id %}">{% if is_app_admin %}Full Profile{% else %}View{% endif %}</a>
-      </article>
-    {% empty %}
-      <p class="muted">No active students found yet.</p>
-    {% endfor %}
+  <h2>{{ selected_classroom }} — Students Needing Attention</h2>
+  <p class="muted small">Showing top {{ limit }}. Never checked students appear first, then oldest last-checking date.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Roll No</th><th>Student</th><th>Last Checked</th><th>Days</th><th>Last Subject</th><th>Last Status</th><th>Total Checks</th><th>Incomplete</th><th>Last Checker</th></tr></thead>
+      <tbody>
+        {% for row in class_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ row.student.roll_no }}</td>
+            <td><a href="{% url 'student_profile' row.student.id %}">{{ row.student.full_name }}</a></td>
+            <td>{{ row.last_checked_label }}</td>
+            <td>{% if row.days_since is not None %}{{ row.days_since }}{% else %}—{% endif %}</td>
+            <td>{{ row.last_subject }}</td>
+            <td>{{ row.last_status }}</td>
+            <td>{{ row.total_checks }}</td>
+            <td>{{ row.incomplete_count }}</td>
+            <td>{{ row.last_checker }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="10">No active students found in this class.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not is_admin_view %}<a class="button primary" href="{% url 'checking_list' %}?classroom={{ selected_classroom.id }}">Open Checking Page</a>{% endif %}
+</section>
+{% endif %}
+
+{% if is_admin_view %}
+<section class="card">
+  <h2>Overall Student Attention — Top 50</h2>
+  <p class="muted small">Higher classes are prioritized first: 8 to 1, then PG/Nursery/KG or other classes.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Class</th><th>Roll No</th><th>Student</th><th>Last Checked</th><th>Days</th><th>Last Subject</th><th>Last Status</th><th>Total Checks</th><th>Incomplete</th></tr></thead>
+      <tbody>
+        {% for row in student_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ row.classroom }}</td>
+            <td>{{ row.student.roll_no }}</td>
+            <td><a href="{% url 'student_profile' row.student.id %}">{{ row.student.full_name }}</a></td>
+            <td>{{ row.last_checked_label }}</td>
+            <td>{% if row.days_since is not None %}{{ row.days_since }}{% else %}—{% endif %}</td>
+            <td>{{ row.last_subject }}</td>
+            <td>{{ row.last_status }}</td>
+            <td>{{ row.total_checks }}</td>
+            <td>{{ row.incomplete_count }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="10">No active students found.</td></tr>{% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
+{% endif %}
 {% endblock %}

@@ -4,11 +4,20 @@
 <div class="page-head">
   <div>
     <h1>Backups</h1>
-    <p class="muted">One JSON backup file per active day. Latest 10 active-day backups are kept.</p>
-    <p class="muted small">For Render/Neon, download backup files regularly. Files saved inside a free Render web service should not be treated as permanent storage.</p>
+    <p class="muted">Create/download JSON backups, or upload a backup file created by this app.</p>
+    <p class="muted small">For Render/Neon, download backup files regularly. Free Render file storage should not be treated as permanent.</p>
   </div>
   <form method="post" action="{% url 'backup_now' %}">{% csrf_token %}<button class="primary" type="submit">Create & Download Backup Now</button></form>
 </div>
+<section class="card">
+  <h2>Upload Backup</h2>
+  <p class="muted small">Use only a JSON backup created by this app. A fresh backup is created before upload restore.</p>
+  <form method="post" action="{% url 'backup_upload' %}" enctype="multipart/form-data" class="form-stack" onsubmit="return confirm('This will load data from the selected backup file. Continue?');">
+    {% csrf_token %}
+    {{ upload_form.file.label_tag }} {{ upload_form.file }}
+    <button class="button danger-safe" type="submit">Upload Backup File</button>
+  </form>
+</section>
 <section class="card table-wrap">
   <table>
     <thead><tr><th>Date</th><th>File</th><th>Reason</th><th>Triggered By</th><th>Updated</th><th>Action</th></tr></thead>

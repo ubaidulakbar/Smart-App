@@ -11,7 +11,7 @@
 <div class="admin-choice-grid">
   <a class="admin-choice checking" href="{% url 'admin_checking_side' %}">
     <strong>Checking Side</strong>
-    <span>Classes, students, copy records, attention list, and correction requests.</span>
+    <span>Classes, students, copy records, attention list, and exports.</span>
   </a>
   <a class="admin-choice teaching" href="{% url 'admin_teaching_side' %}">
     <strong>Teaching Side</strong>
@@ -22,7 +22,6 @@
 <div class="stats-grid">
   <div class="stat-card"><span>Today’s Checks</span><strong>{{ today_locked }}</strong></div>
   <div class="stat-card"><span>This Month</span><strong>{{ month_locked }}</strong></div>
-  <div class="stat-card {% if pending_requests %}stat-alert{% endif %}"><span>{% if pending_requests %}★ {% endif %}Copy Requests</span><strong>{{ pending_requests }}</strong></div>
   <div class="stat-card"><span>Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
   <div class="stat-card"><span>Pending Weeks</span><strong>{{ teacher_pending_count }}</strong></div>
   <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>

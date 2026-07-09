@@ -3,7 +3,7 @@
 {% block content %}
 <section class="card narrow">
   <h1>Review Copy Correction Request</h1>
-  <p><strong>{{ record.student.full_name }}</strong> · {{ record.subject.name }} · {{ record.chapter.title }}</p>
+  <p><strong>{{ record.student.full_name }}</strong> · {{ record.subject.name }} · {% if record.chapter %}{{ record.chapter.title }}{% else %}No chapter{% endif %}</p>
   <div class="locked-box">
     <h2>Current Values</h2>
     <p><strong>Status:</strong> {{ record.get_status_display }}</p>

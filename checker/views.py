@@ -1,8 +1,10 @@
+import tempfile
 from django.contrib import messages
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.db.models import Count, Max, Q
@@ -17,6 +19,7 @@ from openpyxl import Workbook, load_workbook
 from .decorators import app_admin_required, checker_required, teacher_required, is_app_admin, is_teacher_user
 from .forms import (
     AdminCorrectionReviewForm,
+    BackupUploadForm,
     AdminTeacherProgressEditForm,
     ClassSetupForm,
     CorrectionRequestForm,
@@ -93,101 +96,72 @@ def _last_checker_name(record):
     return _display_user(record.entered_by)
 
 
-def _attention_class_subject_rows(limit):
-    rows = []
-    class_subjects = ClassSubject.objects.filter(
-        is_active=True,
-        classroom__is_active=True,
-        subject__is_active=True,
-    ).select_related('classroom', 'subject').order_by('classroom__name', 'classroom__section', 'subject__name')
+def _class_priority(classroom):
+    """Sort classes 8 to 1 first; PG/Nursery/KG and unusual names go below."""
+    raw = (classroom.name or '').strip().lower().replace('grade', '').strip()
+    try:
+        number = int(raw)
+    except (TypeError, ValueError):
+        number = None
+    if number is not None and 1 <= number <= 8:
+        return (0, -number, classroom.section or '')
+    return (1, 0, classroom.section or '', classroom.name or '')
 
-    for class_subject in class_subjects:
-        total_students = Student.objects.filter(classroom=class_subject.classroom, is_active=True).count()
-        chapter_ids = list(class_subject.chapters.filter(is_active=True).values_list('id', flat=True))
-        total_chapters = len(chapter_ids)
-        expected_records = total_students * total_chapters
-        checked_records = CopyCheckRecord.objects.filter(class_subject=class_subject, locked=True).count()
-        pending_records = max(expected_records - checked_records, 0)
-        last_record = CopyCheckRecord.objects.filter(class_subject=class_subject, locked=True).select_related(
-            'chapter', 'entered_by', 'entered_by__checker_profile'
-        ).order_by('-locked_at', '-id').first()
 
-        pending_chapters = 0
-        if total_students and chapter_ids:
-            chapter_counts = dict(
-                CopyCheckRecord.objects.filter(class_subject=class_subject, locked=True)
-                .values('chapter_id')
-                .annotate(total=Count('id'))
-                .values_list('chapter_id', 'total')
-            )
-            pending_chapters = sum(1 for chapter_id in chapter_ids if chapter_counts.get(chapter_id, 0) < total_students)
-        elif chapter_ids:
-            pending_chapters = total_chapters
+def _student_attention_payload(student):
+    last_record = CopyCheckRecord.objects.filter(student=student, locked=True).select_related(
+        'class_subject__subject', 'entered_by', 'entered_by__checker_profile'
+    ).order_by('-locked_at', '-id').first()
+    last_checked_at = last_record.locked_at if last_record else None
+    total_checks = CopyCheckRecord.objects.filter(student=student, locked=True).count()
+    incomplete_count = CopyCheckRecord.objects.filter(student=student, locked=True, status=CopyCheckRecord.STATUS_INCOMPLETE).count()
+    return {
+        'student': student,
+        'classroom': student.classroom,
+        'last_record': last_record,
+        'last_checked_at': last_checked_at,
+        'last_checked_label': _relative_date(last_checked_at),
+        'days_since': _days_since(last_checked_at),
+        'last_subject': last_record.subject.name if last_record else '—',
+        'last_status': last_record.get_status_display() if last_record else '—',
+        'last_checker': _last_checker_name(last_record),
+        'total_checks': total_checks,
+        'incomplete_count': incomplete_count,
+        'sort_key': (0 if last_checked_at is None else 1, last_checked_at or timezone.datetime.min.replace(tzinfo=timezone.get_current_timezone()), student.roll_no, student.full_name),
+    }
 
-        last_checked_at = last_record.locked_at if last_record else None
-        progress = _progress_percent(checked_records, expected_records)
-        rows.append({
-            'class_subject': class_subject,
-            'classroom': class_subject.classroom,
-            'subject': class_subject.subject,
-            'total_students': total_students,
-            'total_chapters': total_chapters,
-            'expected_records': expected_records,
-            'checked_records': checked_records,
-            'pending_records': pending_records,
-            'pending_chapters': pending_chapters,
-            'progress': progress,
-            'last_record': last_record,
-            'last_checked_at': last_checked_at,
-            'last_checked_label': _relative_date(last_checked_at),
-            'days_since': _days_since(last_checked_at),
-            'last_chapter': last_record.chapter.title if last_record else '—',
-            'last_checker': _last_checker_name(last_record),
-            'sort_key': (0 if last_checked_at is None else 1, last_checked_at or timezone.datetime.min.replace(tzinfo=timezone.get_current_timezone()), progress, checked_records),
-        })
 
+def _attention_students_for_class(classroom, limit=None):
+    students = Student.objects.filter(is_active=True, classroom=classroom).select_related('classroom').order_by('roll_no', 'full_name')
+    rows = [_student_attention_payload(student) for student in students]
     rows.sort(key=lambda row: row['sort_key'])
-    return rows[:limit]
+    return rows[:limit] if limit else rows
 
 
-def _attention_student_rows(limit):
+def _attention_student_rows(limit=50):
     rows = []
     students = Student.objects.filter(is_active=True, classroom__is_active=True).select_related('classroom').order_by(
         'classroom__name', 'classroom__section', 'roll_no', 'full_name'
     )
     for student in students:
-        total_expected = ClassSubjectChapter.objects.filter(
-            class_subject__classroom=student.classroom,
-            class_subject__is_active=True,
-            class_subject__subject__is_active=True,
-            is_active=True,
-        ).count()
-        checked_records = CopyCheckRecord.objects.filter(student=student, locked=True).count()
-        pending_records = max(total_expected - checked_records, 0)
-        last_record = CopyCheckRecord.objects.filter(student=student, locked=True).select_related(
-            'class_subject__subject', 'chapter', 'entered_by', 'entered_by__checker_profile'
-        ).order_by('-locked_at', '-id').first()
-        last_checked_at = last_record.locked_at if last_record else None
-        progress = _progress_percent(checked_records, total_expected)
-        rows.append({
-            'student': student,
-            'classroom': student.classroom,
-            'total_expected': total_expected,
-            'checked_records': checked_records,
-            'pending_records': pending_records,
-            'progress': progress,
-            'last_record': last_record,
-            'last_checked_at': last_checked_at,
-            'last_checked_label': _relative_date(last_checked_at),
-            'days_since': _days_since(last_checked_at),
-            'last_subject': last_record.subject.name if last_record else '—',
-            'last_chapter': last_record.chapter.title if last_record else '—',
-            'last_checker': _last_checker_name(last_record),
-            'sort_key': (0 if last_checked_at is None else 1, last_checked_at or timezone.datetime.min.replace(tzinfo=timezone.get_current_timezone()), progress, checked_records),
-        })
-
+        row = _student_attention_payload(student)
+        row['sort_key'] = (_class_priority(student.classroom), row['sort_key'])
+        rows.append(row)
     rows.sort(key=lambda row: row['sort_key'])
     return rows[:limit]
+
+
+def _checking_record_queryset():
+    return CopyCheckRecord.objects.filter(locked=True).select_related(
+        'student',
+        'classroom',
+        'class_subject__subject',
+        'chapter',
+        'entered_by',
+        'entered_by__checker_profile',
+        'actual_checker_user',
+        'actual_checker_user__checker_profile',
+    )
 
 
 def _display_user(user):
@@ -199,63 +173,25 @@ def _display_user(user):
 
 def _subject_rows_from_post(request):
     subject_names = request.POST.getlist('subject_name')
-    chapter_counts = request.POST.getlist('chapter_count')
     rows = []
     errors = []
     seen = set()
     for index, raw_name in enumerate(subject_names):
         name = (raw_name or '').strip()
-        raw_count = chapter_counts[index] if index < len(chapter_counts) else ''
-        if not name and not raw_count:
-            continue
         if not name:
-            errors.append(f'Subject row {index + 1}: subject name is required.')
             continue
         if name.lower() in seen:
             errors.append(f'Subject row {index + 1}: duplicate subject "{name}".')
             continue
         seen.add(name.lower())
-        try:
-            count = int(raw_count)
-        except (TypeError, ValueError):
-            errors.append(f'Subject row {index + 1}: chapter count must be a number.')
-            continue
-        if count < 1:
-            errors.append(f'Subject row {index + 1}: chapter count must be at least 1.')
-            continue
-        if count > 100:
-            errors.append(f'Subject row {index + 1}: chapter count cannot be more than 100.')
-            continue
-        rows.append({'name': name, 'chapter_count': count})
+        rows.append({'name': name, 'chapter_count': 1})
     if not rows:
-        errors.append('Add at least one subject with a chapter count.')
+        errors.append('Add at least one subject.')
     return rows, errors
 
 
 def _validate_class_subject_changes(classroom, subject_rows):
-    """Return safety errors before syncing class subjects.
-
-    Chapters may be increased but not decreased. Subjects removed from the
-    edit form are marked inactive instead of being deleted, so older records
-    remain safe.
-    """
-    if not classroom or not classroom.pk:
-        return []
-
-    errors = []
-    existing_subjects = {
-        cs.subject.name.strip().lower(): cs
-        for cs in ClassSubject.objects.filter(classroom=classroom).select_related('subject')
-    }
-    for row in subject_rows:
-        existing = existing_subjects.get(row['name'].strip().lower())
-        if existing and row['chapter_count'] < existing.chapter_count:
-            errors.append(
-                f'Cannot decrease chapters for {existing.subject.name}. '
-                f'Current count is {existing.chapter_count}; entered count is {row["chapter_count"]}. '
-                'Add a new class setup or keep the old chapter count.'
-            )
-    return errors
+    return []
 
 
 def _sync_class_subjects(classroom, subject_rows):
@@ -272,24 +208,21 @@ def _sync_class_subjects(classroom, subject_rows):
         class_subject, _created = ClassSubject.objects.update_or_create(
             classroom=classroom,
             subject=subject,
-            defaults={'chapter_count': row['chapter_count'], 'is_active': True},
+            defaults={'chapter_count': 1, 'is_active': True},
         )
         submitted_subject_ids.append(class_subject.id)
 
-        for number in range(1, row['chapter_count'] + 1):
-            ClassSubjectChapter.objects.update_or_create(
-                class_subject=class_subject,
-                number=number,
-                defaults={'is_active': True},
-            )
-
-        ClassSubjectChapter.objects.filter(
-            class_subject=class_subject,
-            number__gt=row['chapter_count'],
-        ).update(is_active=False)
-
     # Subjects removed from the edit form are hidden, not deleted, so older records remain safe.
     ClassSubject.objects.filter(classroom=classroom).exclude(id__in=submitted_subject_ids).update(is_active=False)
+
+
+def _class_subject_options(classroom):
+    return ClassSubject.objects.filter(
+        classroom=classroom,
+        is_active=True,
+        subject__is_active=True,
+    ).select_related('subject').order_by('subject__name')
+
 
 
 def login_view(request):
@@ -370,10 +303,8 @@ def dashboard(request):
     context = {
         'today_locked': CopyCheckRecord.objects.filter(entered_by=request.user, locked=True, locked_at__date=today).count(),
         'month_locked': CopyCheckRecord.objects.filter(entered_by=request.user, locked=True, locked_at__date__gte=month_start).count(),
-        'recent_records': CopyCheckRecord.objects.filter(entered_by=request.user).select_related(
-            'student', 'class_subject__subject', 'chapter'
-        )[:10],
-        'attention_class_subjects': _attention_class_subject_rows(3),
+        'recent_records': _checking_record_queryset().filter(entered_by=request.user).order_by('-locked_at', '-id')[:10],
+        'classes': ClassRoom.objects.filter(is_active=True).order_by('name', 'section'),
         'attention_students': _attention_student_rows(3),
     }
     return render(request, 'checker/checker_dashboard.html', context)
@@ -383,19 +314,31 @@ def dashboard(request):
 def attention_list(request):
     is_admin = is_app_admin(request.user)
     show = request.GET.get('show')
-    if is_admin:
-        limit = 100 if show == 'more' else 10
-        more_limit = 100
+    classroom_id = request.GET.get('classroom')
+    selected_classroom = None
+    class_rows = []
+
+    if classroom_id:
+        selected_classroom = get_object_or_404(ClassRoom, pk=classroom_id, is_active=True)
+        class_limit = 10 if show == 'more' else 3
+        class_rows = _attention_students_for_class(selected_classroom, class_limit)
     else:
-        limit = 10 if show == 'more' else 3
-        more_limit = 10
+        class_limit = 10 if show == 'more' else 3
+
+    admin_student_rows = _attention_student_rows(50) if is_admin else []
+    if is_admin and request.GET.get('export') == 'student':
+        return _export_attention_students(admin_student_rows)
+    if request.GET.get('export') == 'class' and selected_classroom:
+        return _export_attention_class(selected_classroom, _attention_students_for_class(selected_classroom, None))
     context = {
-        'limit': limit,
-        'more_limit': more_limit,
+        'limit': class_limit,
+        'more_limit': 10,
         'show_more': show == 'more',
         'is_admin_view': is_admin,
-        'class_subject_rows': _attention_class_subject_rows(limit),
-        'student_rows': _attention_student_rows(limit),
+        'classes': ClassRoom.objects.filter(is_active=True).order_by('name', 'section'),
+        'selected_classroom': selected_classroom,
+        'class_rows': class_rows,
+        'student_rows': admin_student_rows,
     }
     return render(request, 'checker/attention_list.html', context)
 
@@ -408,12 +351,8 @@ def admin_checking_side(request):
         'today_locked': CopyCheckRecord.objects.filter(locked=True, locked_at__date=today).count(),
         'month_locked': CopyCheckRecord.objects.filter(locked=True, locked_at__date__gte=month_start).count(),
         'total_locked': CopyCheckRecord.objects.filter(locked=True).count(),
-        'pending_requests': CorrectionRequest.objects.filter(status=CorrectionRequest.STATUS_PENDING).count(),
-        'attention_class_subjects': _attention_class_subject_rows(3),
         'attention_students': _attention_student_rows(3),
-        'recent_records': CopyCheckRecord.objects.select_related(
-            'student', 'classroom', 'class_subject__subject', 'chapter', 'entered_by'
-        )[:10],
+        'recent_records': _checking_record_queryset().order_by('-locked_at', '-id')[:10],
     }
     return render(request, 'checker/admin_checking_side.html', context)
 
@@ -437,65 +376,25 @@ def admin_teaching_side(request):
 @checker_required
 def select_checking(request):
     form = SelectCheckForm(request.GET or None)
-
-    class_subjects = ClassSubject.objects.filter(
-        is_active=True,
-        classroom__is_active=True,
-        subject__is_active=True,
-    ).select_related('classroom', 'subject').prefetch_related('chapters')
-
-    selection_data = []
-    for class_subject in class_subjects:
-        selection_data.append({
-            'classroom_id': str(class_subject.classroom_id),
-            'class_subject_id': str(class_subject.id),
-            'subject_name': class_subject.subject.name,
-            'chapters': [
-                {'id': str(chapter.id), 'title': chapter.title}
-                for chapter in class_subject.chapters.filter(is_active=True).order_by('number')
-            ],
-        })
-
-    if request.GET.get('classroom') and request.GET.get('class_subject') and request.GET.get('chapter') and form.is_valid():
-        class_subject = form.cleaned_data['class_subject']
-        chapter = form.cleaned_data['chapter']
-        return redirect(f"{reverse('checking_list')}?class_subject={class_subject.id}&chapter={chapter.id}")
-
-    return render(request, 'checker/select_checking.html', {
-        'form': form,
-        'selection_data': selection_data,
-        'selected_classroom': request.GET.get('classroom', ''),
-        'selected_class_subject': request.GET.get('class_subject', ''),
-        'selected_chapter': request.GET.get('chapter', ''),
-    })
+    if request.GET.get('classroom') and form.is_valid():
+        classroom = form.cleaned_data['classroom']
+        return redirect(f"{reverse('checking_list')}?classroom={classroom.id}")
+    return render(request, 'checker/select_checking.html', {'form': form})
 
 
 @checker_required
 def checking_list(request):
-    class_subject = get_object_or_404(
-        ClassSubject.objects.select_related('classroom', 'subject'),
-        pk=request.GET.get('class_subject'),
-        is_active=True,
-    )
-    chapter = get_object_or_404(ClassSubjectChapter, pk=request.GET.get('chapter'), class_subject=class_subject, is_active=True)
-    classroom = class_subject.classroom
-
+    classroom = get_object_or_404(ClassRoom, pk=request.GET.get('classroom'), is_active=True)
     students = Student.objects.filter(classroom=classroom, is_active=True).order_by('roll_no', 'full_name')
-    existing = {
-        record.student_id: record
-        for record in CopyCheckRecord.objects.filter(
-            student__in=students,
-            class_subject=class_subject,
-            chapter=chapter,
-        ).select_related('student', 'entered_by', 'actual_checker_user', 'class_subject__subject', 'chapter')
-    }
-    rows = [{'student': student, 'record': existing.get(student.id), 'form': LockRecordForm()} for student in students]
+    class_subjects = _class_subject_options(classroom)
+    attention_rows = _attention_students_for_class(classroom, 10)
+    recent_records = _checking_record_queryset().filter(classroom=classroom).order_by('-locked_at', '-id')[:10]
     context = {
         'classroom': classroom,
-        'class_subject': class_subject,
-        'subject': class_subject.subject,
-        'chapter': chapter,
-        'rows': rows,
+        'students': students,
+        'class_subjects': class_subjects,
+        'attention_rows': attention_rows,
+        'recent_records': recent_records,
         'refresh_url': request.get_full_path(),
     }
     return render(request, 'checker/checking_list.html', context)
@@ -504,84 +403,102 @@ def checking_list(request):
 @checker_required
 @require_POST
 def lock_record(request):
-    student = get_object_or_404(Student, pk=request.POST.get('student_id'), is_active=True)
-    class_subject = get_object_or_404(
-        ClassSubject.objects.select_related('classroom', 'subject'),
-        pk=request.POST.get('class_subject_id'),
-        is_active=True,
-    )
-    chapter = get_object_or_404(ClassSubjectChapter, pk=request.POST.get('chapter_id'), class_subject=class_subject, is_active=True)
-    form = LockRecordForm(request.POST)
-    next_url = request.POST.get('next') or reverse('select_checking')
+    classroom = get_object_or_404(ClassRoom, pk=request.POST.get('classroom_id'), is_active=True)
+    next_url = request.POST.get('next') or f"{reverse('checking_list')}?classroom={classroom.id}"
+    save_flags = request.POST.getlist('save_row')
+    student_ids = request.POST.getlist('student_id')
+    class_subject_ids = request.POST.getlist('class_subject_id')
+    statuses = request.POST.getlist('status')
+    remarks_list = request.POST.getlist('remarks')
+    actual_checker_names = request.POST.getlist('actual_checker_name')
 
-    if student.classroom_id != class_subject.classroom_id:
-        messages.error(request, 'This student does not belong to the selected class.')
+    candidate_indexes = {int(raw) for raw in save_flags if str(raw).isdigit()}
+    row_count = max(len(student_ids), len(class_subject_ids), len(statuses), len(remarks_list), len(actual_checker_names), (max(candidate_indexes) + 1 if candidate_indexes else 0))
+    records_to_create = []
+    errors = []
+
+    for index in range(row_count):
+        row_selected = index in candidate_indexes
+        student_id = student_ids[index] if index < len(student_ids) else ''
+        class_subject_id = class_subject_ids[index] if index < len(class_subject_ids) else ''
+        status = statuses[index] if index < len(statuses) else CopyCheckRecord.STATUS_COMPLETE
+        remarks = (remarks_list[index] if index < len(remarks_list) else '').strip()
+        actual_checker_name = (actual_checker_names[index] if index < len(actual_checker_names) else '').strip()
+
+        if not row_selected and not student_id and not class_subject_id and not remarks and not actual_checker_name:
+            continue
+        if not row_selected:
+            continue
+
+        row_number = index + 1
+        if not student_id:
+            errors.append(f'Row {row_number}: select a student.')
+            continue
+        if not class_subject_id:
+            errors.append(f'Row {row_number}: select a subject.')
+            continue
+        if status not in dict(CopyCheckRecord.STATUS_CHOICES):
+            errors.append(f'Row {row_number}: invalid status.')
+            continue
+        if status == CopyCheckRecord.STATUS_INCOMPLETE and not remarks:
+            errors.append(f'Row {row_number}: details are required when status is Incomplete.')
+            continue
+
+        try:
+            student = Student.objects.get(pk=student_id, classroom=classroom, is_active=True)
+        except Student.DoesNotExist:
+            errors.append(f'Row {row_number}: selected student does not belong to this class.')
+            continue
+        try:
+            class_subject = ClassSubject.objects.select_related('subject').get(
+                pk=class_subject_id,
+                classroom=classroom,
+                is_active=True,
+                subject__is_active=True,
+            )
+        except ClassSubject.DoesNotExist:
+            errors.append(f'Row {row_number}: selected subject is not assigned to this class.')
+            continue
+
+        records_to_create.append(CopyCheckRecord(
+            student=student,
+            classroom=classroom,
+            class_subject=class_subject,
+            chapter=None,
+            status=status,
+            remarks=remarks,
+            entered_by=request.user,
+            actual_checker_user=None,
+            actual_checker_name=actual_checker_name,
+            locked=True,
+            locked_at=timezone.now(),
+        ))
+
+    if errors:
+        for error in errors:
+            messages.error(request, error)
+        messages.error(request, 'No records were saved. Fix the row errors and try again.')
         return redirect(next_url)
 
-    if not form.is_valid():
-        messages.error(request, 'Please check the row details and try again.')
+    if not records_to_create:
+        messages.warning(request, 'No selected rows were ready to save.')
         return redirect(next_url)
 
     with transaction.atomic():
-        existing = CopyCheckRecord.objects.select_for_update().filter(student=student, chapter=chapter).first()
-        if existing and existing.locked:
-            messages.warning(request, f'{student.full_name} is already locked for this chapter.')
-            return redirect(next_url)
+        created_records = CopyCheckRecord.objects.bulk_create(records_to_create)
+        for record in created_records:
+            log_action(request.user, 'LOCK_RECORD', record, f'Locked flexible copy-checking record for {record.student.full_name}')
 
-        record = existing or CopyCheckRecord(
-            student=student,
-            classroom=student.classroom,
-            class_subject=class_subject,
-            chapter=chapter,
-            entered_by=request.user,
-        )
-        record.classroom = student.classroom
-        record.class_subject = class_subject
-        record.chapter = chapter
-        record.status = form.cleaned_data['status']
-        record.remarks = form.cleaned_data['remarks']
-        record.entered_by = request.user
-        record.actual_checker_user = None
-        record.actual_checker_name = form.cleaned_data['actual_checker_name']
-        record.locked = True
-        record.locked_at = timezone.now()
-        try:
-            record.save()
-        except IntegrityError:
-            messages.warning(request, f'{student.full_name} already has a record for this chapter.')
-            return redirect(next_url)
-
-        log_action(request.user, 'LOCK_RECORD', record, f'Locked {record}')
-
-    ensure_daily_backup(reason='Checker locked a copy-checking record', user=request.user)
-    messages.success(request, f'Locked record for {student.full_name}.')
+    ensure_daily_backup(reason='Checker saved copy-checking batch', user=request.user)
+    messages.success(request, f'Saved and locked {len(records_to_create)} checking record(s).')
     return redirect(next_url)
+
 
 
 @checker_required
 def request_correction(request, record_id):
-    record = get_object_or_404(
-        CopyCheckRecord.objects.select_related('student', 'class_subject__subject', 'chapter'),
-        pk=record_id,
-        locked=True,
-    )
-    if request.method == 'POST':
-        form = CorrectionRequestForm(request.POST)
-        if form.is_valid():
-            correction = form.save(commit=False)
-            correction.record = record
-            correction.requested_by = request.user
-            correction.save()
-            log_action(request.user, 'REQUEST_CORRECTION', correction, f'Requested correction for {record}')
-            messages.success(request, 'Correction request sent to admin.')
-            return redirect('dashboard')
-    else:
-        form = CorrectionRequestForm(initial={
-            'requested_status': record.status,
-            'requested_remarks': record.remarks,
-            'requested_actual_checker_name': record.actual_checker_name,
-        })
-    return render(request, 'checker/request_correction.html', {'form': form, 'record': record})
+    messages.info(request, 'Correction requests are disabled. Add a new checking row if a copy is checked again or an old entry was mistaken.')
+    return redirect('select_checking')
 
 
 @app_admin_required
@@ -607,7 +524,7 @@ def class_setup(request, class_id=None):
                 _sync_class_subjects(classroom, subject_rows)
                 log_action(request.user, 'SAVE_CLASS_SETUP', classroom, f'Saved class setup for {classroom}')
             ensure_daily_backup(reason='Admin saved class setup', user=request.user)
-            messages.success(request, 'Class and subject chapters saved.')
+            messages.success(request, 'Class and assigned subjects saved.')
             return redirect('class_list_admin')
         for error in subject_errors:
             messages.error(request, error)
@@ -615,14 +532,14 @@ def class_setup(request, class_id=None):
         form = ClassSetupForm(instance=classroom)
         if classroom:
             subject_rows = [
-                {'name': item.subject.name, 'chapter_count': item.chapter_count}
+                {'name': item.subject.name, 'chapter_count': 1}
                 for item in classroom.class_subjects.filter(is_active=True).select_related('subject')
             ]
         else:
             subject_rows = []
 
     while len(subject_rows) < 8:
-        subject_rows.append({'name': '', 'chapter_count': ''})
+        subject_rows.append({'name': '', 'chapter_count': 1})
 
     return render(request, 'checker/class_setup.html', {
         'form': form,
@@ -643,7 +560,7 @@ def student_create(request):
             else:
                 log_action(request.user, 'ADD_STUDENT', student, f'Added student {student}')
                 ensure_daily_backup(reason='Admin added a student', user=request.user)
-                messages.success(request, 'Student saved. The class subjects and chapters are assigned automatically through the class setup.')
+                messages.success(request, 'Student saved.')
                 return redirect('student_list_admin')
     else:
         initial = {}
@@ -655,15 +572,115 @@ def student_create(request):
 
 @app_admin_required
 def admin_records(request):
-    records = CopyCheckRecord.objects.filter(locked=True).select_related(
-        'student',
-        'classroom',
-        'class_subject__subject',
-        'chapter',
-        'entered_by',
-        'actual_checker_user',
-    ).order_by('-locked_at', '-id')[:50]
-    return render(request, 'checker/admin_records.html', {'records': records})
+    records = _checking_record_queryset().order_by('-locked_at', '-id')
+    classroom_id = request.GET.get('classroom')
+    subject_id = request.GET.get('subject')
+    student_q = (request.GET.get('student') or '').strip()
+    status = request.GET.get('status')
+    checker_id = request.GET.get('checker')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+
+    if classroom_id:
+        records = records.filter(classroom_id=classroom_id)
+    if subject_id:
+        records = records.filter(class_subject__subject_id=subject_id)
+    if student_q:
+        records = records.filter(Q(student__full_name__icontains=student_q) | Q(student__roll_no__icontains=student_q))
+    if status:
+        records = records.filter(status=status)
+    if checker_id:
+        records = records.filter(entered_by_id=checker_id)
+    if date_from:
+        records = records.filter(locked_at__date__gte=date_from)
+    if date_to:
+        records = records.filter(locked_at__date__lte=date_to)
+
+    if request.GET.get('export') == 'xlsx':
+        return _export_checking_records(records)
+
+    return render(request, 'checker/admin_records.html', {
+        'records': records[:50],
+        'classes': ClassRoom.objects.filter(is_active=True).order_by('name', 'section'),
+        'subjects': Subject.objects.filter(is_active=True).order_by('name'),
+        'checkers': User.objects.filter(checker_profile__role=UserProfile.ROLE_CHECKER).select_related('checker_profile').order_by('checker_profile__display_name', 'username'),
+        'status_choices': CopyCheckRecord.STATUS_CHOICES,
+        'filters': request.GET,
+    })
+
+
+
+def _export_attention_students(rows):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Attention List'
+    ws.append(['Class', 'Roll No', 'Student', 'Last Checked', 'Days Since Last Check', 'Last Subject', 'Last Status', 'Total Checks', 'Incomplete Count', 'Last Checker'])
+    for row in rows:
+        ws.append([
+            str(row['classroom']),
+            row['student'].roll_no,
+            row['student'].full_name,
+            row['last_checked_label'],
+            row['days_since'] if row['days_since'] is not None else '',
+            row['last_subject'],
+            row['last_status'],
+            row['total_checks'],
+            row['incomplete_count'],
+            row['last_checker'],
+        ])
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="attention_students.xlsx"'
+    wb.save(response)
+    return response
+
+
+def _export_attention_class(classroom, rows):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Class Attention'
+    ws.append(['Class', str(classroom)])
+    ws.append([])
+    ws.append(['Roll No', 'Student', 'Last Checked', 'Days Since Last Check', 'Last Subject', 'Last Status', 'Total Checks', 'Incomplete Count', 'Last Checker'])
+    for row in rows:
+        ws.append([
+            row['student'].roll_no,
+            row['student'].full_name,
+            row['last_checked_label'],
+            row['days_since'] if row['days_since'] is not None else '',
+            row['last_subject'],
+            row['last_status'],
+            row['total_checks'],
+            row['incomplete_count'],
+            row['last_checker'],
+        ])
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="attention_{classroom.id}.xlsx"'
+    wb.save(response)
+    return response
+
+
+def _export_checking_records(records):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Checking Records'
+    ws.append(['Date', 'Class', 'Roll No', 'Student', 'Subject', 'Status', 'Details', 'Entered By', 'Actual Checker'])
+    for r in records[:5000]:
+        ws.append([
+            timezone.localtime(r.locked_at).strftime('%Y-%m-%d %H:%M') if r.locked_at else '',
+            str(r.classroom),
+            r.student.roll_no,
+            r.student.full_name,
+            r.subject.name,
+            r.get_status_display(),
+            r.remarks,
+            _display_user(r.entered_by),
+            r.actual_checker_display,
+        ])
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="checking_records.xlsx"'
+    wb.save(response)
+    return response
+
 
 
 @app_admin_required
@@ -797,60 +814,59 @@ def student_profile(request, student_id):
     subject_id = request.GET.get('subject')
     status = request.GET.get('status')
 
-    class_subjects = ClassSubject.objects.filter(
-        classroom=student.classroom,
-        is_active=True,
-        subject__is_active=True,
-    ).select_related('subject')
+    records = student.copy_records.filter(locked=True).select_related(
+        'class_subject__subject', 'entered_by', 'entered_by__checker_profile', 'actual_checker_user'
+    ).order_by('-locked_at', '-id')
     if subject_id:
-        class_subjects = class_subjects.filter(subject_id=subject_id)
+        records = records.filter(class_subject__subject_id=subject_id)
+    if status:
+        records = records.filter(status=status)
 
-    chapters = list(ClassSubjectChapter.objects.filter(class_subject__in=class_subjects, is_active=True).select_related('class_subject__subject'))
-    records = {
-        record.chapter_id: record
-        for record in student.copy_records.filter(chapter__in=chapters).select_related(
-            'class_subject__subject', 'chapter', 'entered_by', 'actual_checker_user'
-        )
-    }
-
-    rows = []
-    for chapter in chapters:
-        record = records.get(chapter.id)
-        if status == PENDING_STATUS and record:
-            continue
-        if status and status != PENDING_STATUS:
-            if not record or record.status != status:
-                continue
-        rows.append({
-            'subject': chapter.class_subject.subject,
-            'chapter': chapter,
-            'record': record,
-            'status_label': record.get_status_display() if record else 'Pending',
-        })
-
-    all_expected_count = ClassSubjectChapter.objects.filter(
-        class_subject__classroom=student.classroom,
-        class_subject__is_active=True,
-        is_active=True,
-    ).count()
-    locked_count = student.copy_records.filter(locked=True).count()
+    all_records = student.copy_records.filter(locked=True)
+    last_record = all_records.select_related('class_subject__subject').order_by('-locked_at', '-id').first()
     summary = {
-        'total_expected': all_expected_count,
-        'locked': locked_count,
-        'pending': max(all_expected_count - locked_count, 0),
-        'checked': student.copy_records.filter(status=CopyCheckRecord.STATUS_CHECKED).count(),
-        'incomplete': student.copy_records.filter(status=CopyCheckRecord.STATUS_INCOMPLETE).count(),
-        'not_submitted': student.copy_records.filter(status=CopyCheckRecord.STATUS_NOT_SUBMITTED).count(),
-        'absent': student.copy_records.filter(status=CopyCheckRecord.STATUS_ABSENT).count(),
+        'total_checks': all_records.count(),
+        'complete': all_records.filter(status=CopyCheckRecord.STATUS_COMPLETE).count(),
+        'incomplete': all_records.filter(status=CopyCheckRecord.STATUS_INCOMPLETE).count(),
+        'last_checked': last_record.locked_at if last_record else None,
+        'last_subject': last_record.subject.name if last_record else '—',
     }
     context = {
         'student': student,
-        'rows': rows,
+        'records': records[:300],
         'summary': summary,
-        'subjects': Subject.objects.filter(class_subjects__classroom=student.classroom, class_subjects__is_active=True).distinct(),
-        'status_choices': [(PENDING_STATUS, 'Pending')] + list(CopyCheckRecord.STATUS_CHOICES),
+        'subjects': Subject.objects.filter(class_subjects__classroom=student.classroom, class_subjects__is_active=True).distinct().order_by('name'),
+        'status_choices': CopyCheckRecord.STATUS_CHOICES,
+        'filters': request.GET,
     }
+    if request.GET.get('export') == 'xlsx':
+        return _export_student_profile(student, records)
     return render(request, 'checker/student_profile.html', context)
+
+
+def _export_student_profile(student, records):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Student Profile'
+    ws.append(['Student', student.full_name])
+    ws.append(['Class', str(student.classroom)])
+    ws.append(['Roll No', student.roll_no])
+    ws.append([])
+    ws.append(['Date', 'Subject', 'Status', 'Details', 'Entered By', 'Actual Checker'])
+    for r in records[:5000]:
+        ws.append([
+            timezone.localtime(r.locked_at).strftime('%Y-%m-%d %H:%M') if r.locked_at else '',
+            r.subject.name,
+            r.get_status_display(),
+            r.remarks,
+            _display_user(r.entered_by),
+            r.actual_checker_display,
+        ])
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="student_{student.id}_checking.xlsx"'
+    wb.save(response)
+    return response
+
 
 
 @app_admin_required
@@ -1075,7 +1091,10 @@ def admin_user_delete(request, user_id):
 @app_admin_required
 def backups_admin(request):
     backups = DailyBackup.objects.select_related('triggered_by')[:50]
-    return render(request, 'checker/backups_admin.html', {'backups': backups})
+    return render(request, 'checker/backups_admin.html', {
+        'backups': backups,
+        'upload_form': BackupUploadForm(),
+    })
 
 
 @app_admin_required
@@ -1093,12 +1112,37 @@ def backup_now(request):
 
 
 @app_admin_required
+@require_POST
+def backup_upload(request):
+    form = BackupUploadForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, 'Please upload a valid JSON backup file.')
+        return redirect('backups_admin')
+    uploaded = form.cleaned_data['file']
+    ensure_daily_backup(reason='Backup before uploaded restore', user=request.user)
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tmp:
+        for chunk in uploaded.chunks():
+            tmp.write(chunk)
+        tmp_path = tmp.name
+    try:
+        call_command('loaddata', tmp_path, verbosity=0)
+    except Exception as exc:
+        messages.error(request, f'Backup upload failed: {exc}')
+        return redirect('backups_admin')
+    log_action(request.user, 'UPLOAD_BACKUP', None, f'Uploaded backup file {uploaded.name}')
+    ensure_daily_backup(reason='After uploaded backup restore', user=request.user)
+    messages.success(request, 'Backup file uploaded and restored.')
+    return redirect('backups_admin')
+
+
+@app_admin_required
 def backup_download(request, backup_id):
     backup = get_object_or_404(DailyBackup, pk=backup_id)
     path = get_backup_path(backup)
     if not path.exists():
         raise Http404('Backup file is not available on this server.')
     return FileResponse(path.open('rb'), as_attachment=True, filename=backup.file_name)
+
 
 
 def _assignment_summary(assignment):
@@ -1448,6 +1492,11 @@ def _delete_data_items(category, ids, current_user):
         return _delete_classrooms(ids)
     if category == 'students':
         return _delete_students(ids)
+    if category == 'records':
+        qs = CopyCheckRecord.objects.filter(id__in=ids)
+        count = qs.count()
+        qs.delete()
+        return count
     return 0
 
 
@@ -1466,6 +1515,8 @@ def _delete_data_queryset(category):
         return ClassRoom.objects.all().order_by('name', 'section')
     if category == 'students':
         return Student.objects.select_related('classroom').order_by('classroom__name', 'classroom__section', 'roll_no', 'full_name')
+    if category == 'records':
+        return _checking_record_queryset().order_by('-locked_at', '-id')[:1000]
     return []
 
 
@@ -1480,6 +1531,8 @@ def _delete_data_label(category, obj):
         return str(obj)
     if category == 'students':
         return f'{obj.classroom} — Roll {obj.roll_no} — {obj.full_name}'
+    if category == 'records':
+        return f'{obj.locked_at:%Y-%m-%d} — {obj.classroom} — {obj.student.full_name} — {obj.subject.name} — {obj.get_status_display()}'
     return str(obj)
 
 
@@ -1491,6 +1544,7 @@ def delete_data_admin(request):
         ('subjects', 'Subjects'),
         ('classes', 'Classes'),
         ('students', 'Students'),
+        ('records', 'Checking records'),
     ]
     category = request.GET.get('category') or request.POST.get('category') or 'teachers'
     valid_categories = {key for key, _label in category_choices}

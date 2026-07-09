@@ -3,8 +3,7 @@
 {% block content %}
 <section class="card">
   <h1>{% if classroom %}Edit Class{% else %}Add Class{% endif %}</h1>
-  <p class="muted">Add subject names and chapter counts here. Chapters are created automatically as Chapter 1, Chapter 2, and so on.</p>
-  <p class="muted small">Safety rule: chapter counts can be increased, but not decreased. Removing a subject from this form marks it inactive instead of deleting old records.</p>
+  <p class="muted">Create a class/section and assign subjects. Copy checking no longer uses chapters.</p>
   <form method="post" class="form-stack">
     {% csrf_token %}
     <div class="form-grid">
@@ -13,16 +12,13 @@
       <label class="checkbox-label">{{ form.is_active }} Active</label>
     </div>
 
-    <h2>Subjects and Chapters</h2>
+    <h2>Assigned Subjects</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Subject</th><th>No. of Chapters</th></tr></thead>
+        <thead><tr><th>Subject</th></tr></thead>
         <tbody>
           {% for row in subject_rows %}
-            <tr>
-              <td><input type="text" name="subject_name" value="{{ row.name }}" placeholder="Mathematics"></td>
-              <td><input type="number" min="1" max="100" name="chapter_count" value="{{ row.chapter_count }}" placeholder="5"></td>
-            </tr>
+            <tr><td><input type="text" name="subject_name" value="{{ row.name }}" placeholder="Mathematics"></td></tr>
           {% endfor %}
         </tbody>
       </table>
