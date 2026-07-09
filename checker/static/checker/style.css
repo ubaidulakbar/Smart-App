@@ -288,3 +288,17 @@ button.danger:hover, .button.danger:hover, .small-button.danger:hover { backgrou
     min-width: 140px;
   }
 }
+.admin-note-box {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0 0;
+  color: #1e3a8a;
+}
+.admin-note-inline {
+  display: block;
+  margin-top: 4px;
+  color: #1e40af;
+  font-weight: 700;
+}

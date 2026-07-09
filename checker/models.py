@@ -273,7 +273,8 @@ class TeacherCourseProgress(models.Model):
 
     assignment = models.ForeignKey(TeacherCourseAssignment, on_delete=models.PROTECT, related_name='progress_rows')
     week_no = models.PositiveIntegerField()
-    detail = models.TextField()
+    admin_detail = models.TextField(blank=True)
+    detail = models.TextField(blank=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_NOT_COMPLETED)
     locked = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)

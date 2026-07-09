@@ -1187,18 +1187,28 @@ def _teacher_assignment_queryset():
     )
 
 
-def _assignment_next_week_no(assignment):
-    latest = assignment.progress_rows.aggregate(max_week=Max('week_no'))['max_week'] or 0
+def _next_global_teacher_week_no():
+    latest = TeacherCourseProgress.objects.aggregate(max_week=Max('week_no'))['max_week'] or 0
     return latest + 1
 
 
-def _issue_week_rows_for_assignments(assignments):
+def _teacher_assignments_for_new_week():
+    return _teacher_assignment_queryset().order_by(
+        'teacher__checker_profile__display_name',
+        'teacher__username',
+        'class_subject__classroom__name',
+        'class_subject__classroom__section',
+        'class_subject__subject__name',
+    )
+
+
+def _issue_week_rows_for_assignments(assignments, week_no):
     rows = []
     for assignment in assignments:
-        next_week_no = _assignment_next_week_no(assignment)
         rows.append({
             'assignment': assignment,
-            'next_week_no': next_week_no,
+            'week_no': week_no,
+            'next_week_no': week_no,
             'teacher_name': _display_user(assignment.teacher),
             'teacher_username': assignment.teacher.username,
             'classroom': assignment.classroom,
@@ -1206,24 +1216,6 @@ def _issue_week_rows_for_assignments(assignments):
             'existing_weeks': assignment.progress_rows.count(),
         })
     return rows
-
-
-def _scope_filtered_assignments(form):
-    assignments = _teacher_assignment_queryset()
-    scope = form.cleaned_data['scope']
-    if scope == IssueWeekForm.SCOPE_TEACHER:
-        assignments = assignments.filter(teacher=form.cleaned_data['teacher'])
-    elif scope == IssueWeekForm.SCOPE_CLASS:
-        assignments = assignments.filter(class_subject__classroom=form.cleaned_data['classroom'])
-    elif scope == IssueWeekForm.SCOPE_COURSE:
-        assignments = assignments.filter(class_subject=form.cleaned_data['class_subject'])
-    return assignments.order_by(
-        'teacher__checker_profile__display_name',
-        'teacher__username',
-        'class_subject__classroom__name',
-        'class_subject__classroom__section',
-        'class_subject__subject__name',
-    )
 
 
 @app_admin_required
@@ -1331,33 +1323,37 @@ def issue_week_admin(request):
     preview_rows = None
     created_rows = None
     skipped_rows = None
+    next_week_no = _next_global_teacher_week_no()
 
     if request.method == 'POST':
         form = IssueWeekForm(request.POST)
         if form.is_valid():
-            assignments = _scope_filtered_assignments(form)
-            issue_rows = _issue_week_rows_for_assignments(assignments)
+            assignments = _teacher_assignments_for_new_week()
+            issue_rows = _issue_week_rows_for_assignments(assignments, next_week_no)
+            admin_detail = (form.cleaned_data.get('admin_detail') or '').strip()
 
             if not issue_rows:
                 messages.error(
                     request,
-                    'No active teacher-course assignment matched this scope. Go to School Setup → Teacher Assignments and make sure the teacher has an active class-subject assignment.'
+                    'No active teacher-course assignments found. Go to School Setup → Teacher Assignments and assign teachers to active class-subjects first.'
                 )
                 preview_rows = []
             elif 'preview' in request.POST:
                 preview_rows = issue_rows
-                messages.info(request, f'Preview ready. {len(preview_rows)} active assignment(s) matched this scope.')
+                messages.info(request, f'Preview ready. Week {next_week_no} will be created for {len(preview_rows)} active teacher-course assignment(s).')
             elif request.POST.get('confirm') == 'yes':
                 created_rows = []
                 skipped_rows = []
                 with transaction.atomic():
-                    locked_assignments = _scope_filtered_assignments(form).select_for_update()
+                    locked_assignments = _teacher_assignments_for_new_week().select_for_update()
+                    # Recalculate inside the transaction so all assignments receive the same next week number.
+                    locked_week_no = _next_global_teacher_week_no()
                     for assignment in locked_assignments:
-                        next_week_no = _assignment_next_week_no(assignment)
                         obj, created = TeacherCourseProgress.objects.get_or_create(
                             assignment=assignment,
-                            week_no=next_week_no,
+                            week_no=locked_week_no,
                             defaults={
+                                'admin_detail': admin_detail,
                                 'detail': '',
                                 'status': TeacherCourseProgress.STATUS_NOT_COMPLETED,
                                 'locked': False,
@@ -1365,7 +1361,7 @@ def issue_week_admin(request):
                         )
                         row = {
                             'assignment': assignment,
-                            'week_no': next_week_no,
+                            'week_no': locked_week_no,
                             'teacher_name': _display_user(assignment.teacher),
                             'teacher_username': assignment.teacher.username,
                             'classroom': assignment.classroom,
@@ -1373,18 +1369,19 @@ def issue_week_admin(request):
                         }
                         if created:
                             created_rows.append(row)
-                            log_action(request.user, 'ISSUE_TEACHER_WEEK', obj, f'Issued week {next_week_no} for {assignment}')
+                            log_action(request.user, 'ISSUE_TEACHER_WEEK', obj, f'Issued week {locked_week_no} for {assignment}')
                         else:
                             skipped_rows.append(row)
 
                 if created_rows:
                     ensure_daily_backup(reason='Admin issued new teacher week rows', user=request.user)
-                    messages.success(request, f'Issued new week rows. Created: {len(created_rows)}. Skipped existing: {len(skipped_rows)}.')
+                    messages.success(request, f'Issued Week {created_rows[0]["week_no"]} for all active teacher-course assignments. Created: {len(created_rows)}. Skipped existing: {len(skipped_rows)}.')
                 else:
-                    messages.warning(request, 'No week rows were created. Check whether active teacher-course assignments exist for this scope.')
-                preview_rows = _issue_week_rows_for_assignments(_scope_filtered_assignments(form))
+                    messages.warning(request, 'No week rows were created. Check whether active teacher-course assignments exist.')
+                next_week_no = _next_global_teacher_week_no()
+                preview_rows = _issue_week_rows_for_assignments(_teacher_assignments_for_new_week(), next_week_no)
     else:
-        form = IssueWeekForm(initial={'scope': IssueWeekForm.SCOPE_ALL})
+        form = IssueWeekForm()
 
     total_active_assignments = _teacher_assignment_queryset().count()
 
@@ -1394,6 +1391,7 @@ def issue_week_admin(request):
         'created_rows': created_rows,
         'skipped_rows': skipped_rows,
         'total_active_assignments': total_active_assignments,
+        'next_week_no': next_week_no,
     })
 
 
@@ -1497,22 +1495,25 @@ def teacher_progress_row_edit_admin(request, progress_id):
         form = AdminTeacherProgressEditForm(request.POST)
         if form.is_valid():
             old_detail = progress.detail
+            old_admin_detail = progress.admin_detail
             old_status = progress.status
+            progress.admin_detail = form.cleaned_data['admin_detail']
             progress.detail = form.cleaned_data['detail']
             progress.status = form.cleaned_data['status']
-            progress.save(update_fields=['detail', 'status', 'locked', 'completed_at', 'updated_at'])
+            progress.save(update_fields=['admin_detail', 'detail', 'status', 'locked', 'completed_at', 'updated_at'])
             note = form.cleaned_data.get('admin_note') or ''
             log_action(
                 request.user,
                 'ADMIN_EDIT_TEACHER_PROGRESS',
                 progress,
-                f'Admin edited week {progress.week_no}. Old status: {old_status}. New status: {progress.status}. Note: {note}. Old detail: {old_detail[:120]}',
+                f'Admin edited week {progress.week_no}. Old status: {old_status}. New status: {progress.status}. Note: {note}. Old admin detail: {old_admin_detail[:120]}. Old teacher detail: {old_detail[:120]}',
             )
             ensure_daily_backup(reason='Admin edited teacher progress row', user=request.user)
             messages.success(request, 'Teacher progress row updated by admin.')
             return redirect('teacher_progress_assignment_detail_admin', assignment_id=progress.assignment_id)
     else:
         form = AdminTeacherProgressEditForm(initial={
+            'admin_detail': progress.admin_detail,
             'detail': progress.detail,
             'status': progress.status,
         })
@@ -1530,7 +1531,7 @@ def teacher_progress_export(request):
     wb = Workbook()
     ws = wb.active
     ws.title = 'Teacher Progress'
-    ws.append(['Teacher', 'Class', 'Subject', 'Week No', 'Detail', 'Status', 'Created', 'Completed'])
+    ws.append(['Teacher', 'Class', 'Subject', 'Week No', 'Admin Detail', 'Teacher Detail', 'Status', 'Created', 'Completed'])
     rows = TeacherCourseProgress.objects.select_related(
         'assignment__teacher__checker_profile',
         'assignment__class_subject__classroom',
@@ -1548,6 +1549,7 @@ def teacher_progress_export(request):
             str(row.assignment.classroom),
             row.assignment.subject.name,
             row.week_no,
+            row.admin_detail,
             row.detail,
             row.get_status_display(),
             timezone.localtime(row.created_at).strftime('%Y-%m-%d %H:%M') if row.created_at else '',

@@ -29,6 +29,7 @@
         <div>
           <strong>Week {{ row.week_no }}</strong>
           <p class="muted small">Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</p>
+          {% if row.admin_detail %}<p class="admin-note-box"><strong>Admin detail:</strong> {{ row.admin_detail|linebreaksbr }}</p>{% endif %}
         </div>
         <label>Week detail
           <textarea name="detail" rows="3" required placeholder="Write what was completed this week...">{{ row.detail }}</textarea>
@@ -45,16 +46,17 @@
   <h2>Completed / Locked Weeks</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Week No</th><th>Detail</th><th>Status</th><th>Completed</th></tr></thead>
+      <thead><tr><th>Week No</th><th>Admin Detail</th><th>Detail</th><th>Status</th><th>Completed</th></tr></thead>
       <tbody>
         {% for row in completed_rows %}
           <tr>
             <td><strong>{{ row.week_no }}</strong></td>
+            <td>{% if row.admin_detail %}{{ row.admin_detail|linebreaksbr }}{% else %}—{% endif %}</td>
             <td>{{ row.detail|linebreaksbr }}</td>
             <td><span class="badge success">{{ row.get_status_display }}</span></td>
             <td>{% if row.completed_at %}{{ row.completed_at|date:'d M Y, h:i A' }}{% else %}—{% endif %}</td>
           </tr>
-        {% empty %}<tr><td colspan="4">No completed rows yet.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="5">No completed rows yet.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

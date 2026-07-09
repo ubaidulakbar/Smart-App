@@ -26,6 +26,7 @@
       <div class="mini-item {% if row.needs_attention %}needs-attention{% endif %}">
         <strong>{{ row.assignment.classroom }} — {{ row.assignment.subject.name }} — Week {{ row.week_no }}</strong>
         <span>Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</span>
+        {% if row.admin_detail %}<span class="admin-note-inline">Admin: {{ row.admin_detail|truncatechars:120 }}</span>{% endif %}
       </div>
     {% endfor %}
   </div>

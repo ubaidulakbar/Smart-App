@@ -18,6 +18,7 @@
         <div>
           <strong>{{ row.assignment.classroom }} — {{ row.assignment.subject.name }} — Week {{ row.week_no }}</strong>
           <p class="muted small">Pending for {{ row.days_pending }} day(s){% if row.needs_attention %} · Needs attention{% endif %}</p>
+          {% if row.admin_detail %}<p class="admin-note-box"><strong>Admin detail:</strong> {{ row.admin_detail|linebreaksbr }}</p>{% endif %}
         </div>
         <label>Week detail
           <textarea name="detail" rows="3" required placeholder="Write what was completed this week...">{{ row.detail }}</textarea>

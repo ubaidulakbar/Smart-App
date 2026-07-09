@@ -4,27 +4,29 @@
 <div class="page-head">
   <div>
     <h1>Issue New Week</h1>
-    <p class="muted">Each active teacher-course gets its own next week number. If one course is at Week 1 and another is at Week 4, the app issues Week 2 and Week 5 respectively.</p>
+    <p class="muted">Creates the same next week number for every active teacher-course assignment.</p>
   </div>
-  <a class="button" href="{% url 'admin_teaching_side' %}">Back to Teaching Side</a>
+  <a class="button" href="{% url 'admin_teaching_side' %}">Back to Teaching Progress</a>
 </div>
 
 <div class="stats-grid">
   <div class="stat-card"><span>Active Teacher-Courses</span><strong>{{ total_active_assignments }}</strong></div>
-  <div class="stat-card"><span>Week Rule</span><strong>Per Course +1</strong></div>
+  <div class="stat-card"><span>Next Week</span><strong>Week {{ next_week_no }}</strong></div>
+  <div class="stat-card"><span>Issue Rule</span><strong>All Subjects</strong></div>
 </div>
 
 <section class="card narrow">
-  <h2>Scope</h2>
+  <h2>Issue Week {{ next_week_no }}</h2>
+  <p class="muted small">No teacher, class, or subject selection is needed. This will issue Week {{ next_week_no }} to every active teacher-course assignment.</p>
   <form method="post" class="form-stack">
     {% csrf_token %}
     {{ form.as_p }}
     <div class="button-row">
       <button class="button" type="submit" name="preview" value="1">Preview</button>
-      <button class="primary" type="submit" name="confirm" value="yes" onclick="return confirm('Issue the next week row for the selected active teacher-course assignments?');">Issue New Week</button>
+      <button class="primary" type="submit" name="confirm" value="yes" onclick="return confirm('Issue Week {{ next_week_no }} for every active teacher-course assignment?');">Issue New Week</button>
     </div>
   </form>
-  <p class="muted small">If nothing is created, check School Setup → Teacher Assignments and confirm the teacher has an active assignment.</p>
+  <p class="muted small">If nothing is created, go to School Setup → Teacher Assignments and make sure teachers have active class-subject assignments.</p>
 </section>
 
 {% if created_rows is not None %}
@@ -46,6 +48,7 @@
 {% if skipped_rows %}
 <section class="card">
   <h2>Skipped Existing Rows: {{ skipped_rows|length }}</h2>
+  <p class="muted small">These rows already existed for that teacher-course and week number.</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Teacher</th><th>Class</th><th>Subject</th><th>Week</th></tr></thead>
@@ -61,7 +64,8 @@
 
 {% if preview_rows is not None %}
 <section class="card">
-  <h2>Preview: {{ preview_rows|length }} active assignment(s)</h2>
+  <h2>Preview: Week {{ next_week_no }}</h2>
+  <p class="muted small">The following active teacher-course assignments will receive Week {{ next_week_no }}.</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Teacher</th><th>Class</th><th>Subject</th><th>Existing Rows</th><th>Will Create</th></tr></thead>
@@ -74,7 +78,7 @@
             <td>{{ row.existing_weeks }}</td>
             <td><strong>Week {{ row.next_week_no }}</strong></td>
           </tr>
-        {% empty %}<tr><td colspan="5">No active assignments match this scope. Go to School Setup → Teacher Assignments first.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="5">No active teacher-course assignments found. Go to School Setup → Teacher Assignments first.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

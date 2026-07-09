@@ -13,11 +13,11 @@
   <div class="stat-card"><span>Active Teacher Courses</span><strong>{{ teacher_assignments_count }}</strong></div>
   <div class="stat-card"><span>Pending Weeks</span><strong>{{ teacher_pending_count }}</strong></div>
   <div class="stat-card"><span>Completed Weeks</span><strong>{{ teacher_completed_count }}</strong></div>
-  <div class="stat-card"><span>Issue Rule</span><strong>Per Course +1</strong></div>
+  <div class="stat-card"><span>Issue Rule</span><strong>Same Week for All</strong></div>
 </div>
 
 <div class="admin-action-grid">
-  <a class="admin-action primary-action" href="{% url 'issue_week_admin' %}"><strong>Issue New Week</strong><span>Create the next week row for all or selected active teacher-course assignments.</span></a>
+  <a class="admin-action primary-action" href="{% url 'issue_week_admin' %}"><strong>Issue New Week</strong><span>Create the same next week row for every active teacher-course assignment.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_classes_admin' %}"><strong>Progress by Class</strong><span>Open class-wise teaching progress.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_teachers_admin' %}"><strong>Progress by Teacher</strong><span>Open teacher-wise teaching progress.</span></a>
   <a class="admin-action" href="{% url 'teacher_progress_export' %}"><strong>Export Teacher Excel</strong><span>Download all teacher progress.</span></a>

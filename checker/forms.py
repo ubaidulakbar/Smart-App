@@ -200,59 +200,15 @@ class TeacherCompleteForm(forms.Form):
 
 
 class IssueWeekForm(forms.Form):
-    SCOPE_ALL = 'all'
-    SCOPE_TEACHER = 'teacher'
-    SCOPE_CLASS = 'class'
-    SCOPE_COURSE = 'course'
-    SCOPE_CHOICES = [
-        (SCOPE_ALL, 'All active teacher-course assignments'),
-        (SCOPE_TEACHER, 'Selected teacher'),
-        (SCOPE_CLASS, 'Selected class'),
-        (SCOPE_COURSE, 'Selected class-subject/course'),
-    ]
-
-    scope = forms.ChoiceField(choices=SCOPE_CHOICES, initial=SCOPE_ALL)
-    teacher = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
-    classroom = forms.ModelChoiceField(queryset=ClassRoom.objects.none(), required=False, label='Class / Section')
-    class_subject = forms.ModelChoiceField(queryset=ClassSubject.objects.none(), required=False, label='Class / Subject')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['teacher'].queryset = User.objects.filter(
-            is_active=True,
-            checker_profile__role=UserProfile.ROLE_TEACHER,
-            checker_profile__is_active_checker=True,
-        ).select_related('checker_profile').order_by('checker_profile__display_name', 'username')
-        self.fields['classroom'].queryset = ClassRoom.objects.filter(is_active=True).order_by('name', 'section')
-        self.fields['class_subject'].queryset = ClassSubject.objects.filter(
-            is_active=True,
-            classroom__is_active=True,
-            subject__is_active=True,
-            teacher_assignments__is_active=True,
-        ).select_related('classroom', 'subject').distinct().order_by('classroom__name', 'classroom__section', 'subject__name')
-        self.fields['teacher'].label_from_instance = self._teacher_label
-        self.fields['class_subject'].label_from_instance = self._class_subject_label
-
-    @staticmethod
-    def _teacher_label(user):
-        profile = getattr(user, 'checker_profile', None)
-        display = profile.display_name if profile else user.username
-        return f'{display} (@{user.username})'
-
-    @staticmethod
-    def _class_subject_label(class_subject):
-        return f'{class_subject.classroom} - {class_subject.subject.name}'
-
-    def clean(self):
-        cleaned = super().clean()
-        scope = cleaned.get('scope')
-        if scope == self.SCOPE_TEACHER and not cleaned.get('teacher'):
-            self.add_error('teacher', 'Select a teacher for this scope.')
-        if scope == self.SCOPE_CLASS and not cleaned.get('classroom'):
-            self.add_error('classroom', 'Select a class for this scope.')
-        if scope == self.SCOPE_COURSE and not cleaned.get('class_subject'):
-            self.add_error('class_subject', 'Select a class-subject for this scope.')
-        return cleaned
+    admin_detail = forms.CharField(
+        label='Admin detail for teachers',
+        required=False,
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': 'Optional note/instruction for teachers for this issued week...',
+        }),
+        help_text='This note will be visible to teachers on their pending/completed week rows.',
+    )
 
 
 class TeacherProgressCorrectionRequestForm(forms.ModelForm):
@@ -283,6 +239,7 @@ class AdminTeacherProgressCorrectionReviewForm(forms.Form):
 
 
 class AdminTeacherProgressEditForm(forms.Form):
-    detail = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), label='Week detail')
+    admin_detail = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False, label='Admin detail for teacher')
+    detail = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False, label='Teacher week detail')
     status = forms.ChoiceField(choices=TeacherCourseProgress.STATUS_CHOICES)
-    admin_note = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False, label='Admin note')
+    admin_note = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False, label='Admin edit note')
